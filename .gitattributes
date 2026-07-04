@@ -1,0 +1,21 @@
+# Normalize line endings. Store text as LF in the repository and check it out
+# as LF on every platform, which keeps things consistent and silences the
+# "LF will be replaced by CRLF" warnings on Windows.
+* text=auto eol=lf
+
+# Explicit text types used in this project (all LF).
+*.html      text eol=lf
+*.js        text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.opml      text eol=lf
+*.xml       text eol=lf
+*.gitignore text eol=lf
+
+# Common binary types — never touch line endings (future-proofing).
+*.png   binary
+*.jpg   binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary

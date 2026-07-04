@@ -1,0 +1,240 @@
+<html>
+	<head>
+		<title id="idPageTitle">Editing subscription lists</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		
+		<script src="//s3.amazonaws.com/scripting.com/code/includes/jquery-1.9.1.min.js"></script>
+		<link href="//s3.amazonaws.com/scripting.com/code/includes/bootstrap.css" rel="stylesheet">
+		<script src="//s3.amazonaws.com/scripting.com/code/includes/bootstrap.min.js"></script>
+		<link rel="stylesheet" href="//s3.amazonaws.com/scripting.com/code/fontawesome/5.12.0/css/all.css">
+		<link href="//fonts.googleapis.com/css?family=Ubuntu:400,500i,700" rel="stylesheet">
+		<script src="//s3.amazonaws.com/scripting.com/code/includes/basic/code.js"></script>
+		<link href="//s3.amazonaws.com/scripting.com/code/includes/basic/styles.css" rel="stylesheet" type="text/css">
+		
+		<script src="//s3.amazonaws.com/api.nodestorage.io/api.js"></script>
+		<script src="//s3.amazonaws.com/fargo.io/code/shared/emojify.js"></script>
+		<link rel="stylesheet" href="//s3.amazonaws.com/fargo.io/code/shared/emojify.css"/>
+		<script src="//s3.amazonaws.com/fargo.io/code/markdownConverter.js"></script>
+		<script src="//s3.amazonaws.com/fargo.io/cms/dateFormat.js"></script>
+		
+		<script src="//s3.amazonaws.com/scripting.com/code/outlinebrowser/code.js"></script>
+		<link href="//s3.amazonaws.com/scripting.com/code/outlinebrowser/styles.css" rel="stylesheet" type="text/css">
+		
+		<script src="//s3.amazonaws.com/fargo.io/code/shared/xml.js"></script>
+		<script src="//s3.amazonaws.com/fargo.io/code/shared/reader.js"></script>
+		<script src="//s3.amazonaws.com/scripting.com/code/opmlpackage/client/opml.js"></script>
+		<script src="//s3.amazonaws.com/scripting.com/code/pagepark/templates/opml/code.js"></script>
+		<link href="//s3.amazonaws.com/scripting.com/code/pagepark/templates/opml/styles.css" rel="stylesheet" type="text/css">
+		
+		<!-- Facebook metadata -->
+			<meta property="og:url" content="http://editsubscriptionlists.opml.org/" />
+			<meta property="og:type" content="website" />
+			<meta property="og:title" content="Editing subscription lists" />
+			<meta property="og:description" content="" />
+			<meta property="og:image" content="" />
+			<meta property="og:site_name" content="" />
+		<!-- Twitter metadata -->
+			<meta name="twitter:card" content="summary_large_image">
+			<meta name="twitter:site" content="@davewiner">
+			<meta name="twitter:title" content="Editing subscription lists">
+			<meta name="twitter:description" content="">
+			<meta name="twitter:image:src" content="">
+		
+		<script>
+			var jstruct = {
+    "opml": {
+        "version": "2.0",
+        "head": {
+            "title": "Editing subscription lists",
+            "dateCreated": "Sun, 01 Oct 2017 04:28:45 GMT",
+            "vertScrollState": "1",
+            "windowTop": "631",
+            "windowLeft": "1087",
+            "windowBottom": "1002",
+            "windowRight": "1768",
+            "type": "blogpost",
+            "flDisqusComments": "false",
+            "disqusGroup": "scripting",
+            "urlPublic": "http://editsubscriptionlists.opml.org/",
+            "ownerTwitterScreenName": "davewiner",
+            "ownerName": "dave.rss",
+            "ownerId": "http://twitter.com/davewiner",
+            "urlUpdateSocket": "ws://drummer.scripting.com:1232/",
+            "dateModified": "Sun, 15 May 2022 15:01:54 GMT",
+            "expansionState": "1,5,10,16,18,21,23,26,28",
+            "lastCursor": "19",
+            "generator": "opmltojs v0.4.14"
+        },
+        "body": {
+            "subs": [
+                {
+                    "text": "Use Drummer to create an OPML subscription list",
+                    "created": "Sun, 01 Oct 2017 04:30:58 GMT",
+                    "subs": [
+                        {
+                            "text": "A subscription list is an OPML document that contains a list of feeds. ",
+                            "created": "Mon, 16 Jan 2006 13:07:54 GMT"
+                        },
+                        {
+                            "text": "It's a popular format used to exchange subscriptions between feed readers. ",
+                            "created": "Sat, 14 May 2022 16:54:38 GMT"
+                        },
+                        {
+                            "text": "Since <a href=\"http://drummer.scripting.com/\">Drummer's</a> native file format is OPML, it's the perfect way to create your own subscription lists.",
+                            "created": "Sat, 14 May 2022 17:42:15 GMT"
+                        }
+                    ]
+                },
+                {
+                    "text": "Create the file",
+                    "created": "Sat, 14 May 2022 16:55:08 GMT",
+                    "subs": [
+                        {
+                            "text": "In <a href=\"http://drummer.scripting.com/\">Drummer</a>, choose the <i>New</i> command from the <i>File</i> menu. ",
+                            "created": "Sat, 14 May 2022 16:55:11 GMT"
+                        },
+                        {
+                            "text": "Enter a file name, say list.opml.",
+                            "created": "Sat, 14 May 2022 16:56:11 GMT"
+                        },
+                        {
+                            "text": "Choose <i>Set title</i> from the <i>File</i> menu, and enter a title, something like My Subscription List. ",
+                            "created": "Sat, 14 May 2022 16:56:23 GMT"
+                        },
+                        {
+                            "text": "You should see an outline with one empty headline. ",
+                            "created": "Sat, 14 May 2022 16:57:27 GMT"
+                        }
+                    ]
+                },
+                {
+                    "text": "Add a feed",
+                    "created": "Sat, 14 May 2022 17:32:11 GMT",
+                    "subs": [
+                        {
+                            "text": "With the cursor on the empty headline, choose <i>Add feed</i> from the <i>Tools</i> menu in Drummer. ",
+                            "created": "Sat, 14 May 2022 17:32:15 GMT"
+                        },
+                        {
+                            "text": "Drummer will suggest the URL of my blog's feed, click OK to accept it. ",
+                            "created": "Sat, 14 May 2022 17:33:24 GMT"
+                        },
+                        {
+                            "text": "You should now have a headline entitled Scripting News. ",
+                            "created": "Sat, 14 May 2022 17:33:51 GMT"
+                        },
+                        {
+                            "text": "That headline will have attributes attached to it that say when the item was created, where the feed is, its language, the title of the feed.  ",
+                            "created": "Sat, 14 May 2022 17:34:07 GMT"
+                        },
+                        {
+                            "text": "You can see this info by clicking on the Suitcase icon in the left margin of Drummer. ",
+                            "created": "Sat, 14 May 2022 17:35:39 GMT"
+                        }
+                    ]
+                },
+                {
+                    "text": "It reads the feed",
+                    "created": "Sun, 15 May 2022 14:57:20 GMT",
+                    "subs": [
+                        {
+                            "text": "Before inserting the headlne, Drummer reads the feed and parses it. If it worked you can be pretty sure it's a valid feed and will be read by other software.",
+                            "created": "Sun, 15 May 2022 14:57:24 GMT"
+                        }
+                    ]
+                },
+                {
+                    "text": "Add more feeds",
+                    "created": "Sat, 14 May 2022 17:36:01 GMT",
+                    "subs": [
+                        {
+                            "text": "An outline with one feed inside it qualifies as a subscription list, so what you have now is such a list. ",
+                            "created": "Sat, 14 May 2022 17:36:04 GMT"
+                        },
+                        {
+                            "text": "Obviously you can and should add more feeds, following the instructions above, except before choosing <i>Add feed</i> you should have the URL of the feed on the clipboard ready to paste into the dialog that Drummer presents.",
+                            "created": "Sat, 14 May 2022 17:36:20 GMT"
+                        }
+                    ]
+                },
+                {
+                    "text": "What formats are supported?",
+                    "created": "Sat, 14 May 2022 17:37:49 GMT",
+                    "subs": [
+                        {
+                            "text": "All flavors of RSS, Atom and RDF. ",
+                            "created": "Sat, 14 May 2022 17:37:54 GMT"
+                        }
+                    ]
+                },
+                {
+                    "text": "How to share the OPML file",
+                    "created": "Sat, 14 May 2022 17:38:46 GMT",
+                    "subs": [
+                        {
+                            "text": "You can download all your files using the <i>Download my files</i> command in the <i>Tools</i> menu. Your subscription list file will be in the folder you download, ready for you to share via email, instant messaging, whatever. ",
+                            "created": "Sat, 14 May 2022 17:38:53 GMT"
+                        },
+                        {
+                            "text": "You can also make your list public so you can share it as a URL that could be included in other outlines especially other people's subscription lists. You can build structures of lists this way, but to do so your list file must be public. To make it public choose <i>Make outline public</i> from the <i>File</i> menu. ",
+                            "created": "Sat, 14 May 2022 17:39:53 GMT"
+                        }
+                    ]
+                },
+                {
+                    "text": "Technical info",
+                    "created": "Sun, 01 Oct 2017 04:31:18 GMT",
+                    "subs": [
+                        {
+                            "text": "The OPML 2.0 spec <a href=\"http://www.opml.org/spec2#subscriptionLists\">explains</a> the underlying format for subscription lists, if you're implementing a feed reader or aggregator, you'll need this info. ",
+                            "created": "Sun, 15 May 2022 14:01:24 GMT"
+                        }
+                    ]
+                },
+                {
+                    "text": "Notes",
+                    "created": "Sat, 14 May 2022 15:19:50 GMT",
+                    "subs": [
+                        {
+                            "text": "An earlier version of this doc, written in 2017, with instructions for the OPML Editor is <a href=\"http://editsubscriptionlists.opml.org/opmlEditor.opml\">archived here</a>. ",
+                            "created": "Sat, 14 May 2022 15:19:51 GMT"
+                        },
+                        {
+                            "text": "If you have comments or questions, post them <a href=\"https://github.com/scripting/drummerSupport/issues/161\">here</a>. ",
+                            "created": "Sun, 15 May 2022 15:00:23 GMT"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+};
+			</script>
+		</head>
+	<body>
+		<div class="divPageBody">
+			<div class="divOutlineContainer" id="idOutlineContainer" style="display: none;">
+				<div class="divXmlIcon" id="idXmlIcon"></div>
+				<div class="divLastUpdate"><b>Last update</b>: <span id="idWhenLastUpdate"></span>.</div>
+				<div class="divOutlineTitle" id="idOutlineTitle">
+					</div>
+				<div class="divOutlineDescription" id="idOutlineDescription">
+					</div>
+				<div class="divOutlineDisplayer" id="idOutlineDisplayer">
+					</div>
+				<div class="divWhenCreated"><b>Posted</b>: <span id="idWhenCreated"></span>.</div>
+				<div class="divOutlineFooter" id="idOutlineFooter">
+					</div>
+				<div class="divComments" id="idComments">
+					<div id="disqus_thread"></div>
+					</div>
+				</div>
+			</div>
+		<script>
+			$(document).ready (function () {
+				startup ();
+				});
+			</script>
+		</body>
+	</html>

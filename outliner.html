@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Outliner</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f5f0e8;--paper:#faf7f2;--ink:#1a1612;--ink-mid:#4a4540;--ink-light:#9a9590;--accent:#c0392b;--accent-soft:#f0e0de;--indent:22px;--line-h:30px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:'Source Sans 3',sans-serif;color:var(--ink);min-height:100vh;display:flex;flex-direction:column}
+header{padding:22px 48px 16px;border-bottom:2px solid var(--ink);display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+header h1{font-family:'Lora',serif;font-size:26px;font-weight:700;letter-spacing:-.5px}
+#version-badge{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-light);align-self:center}
+#doc-title{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-mid);background:transparent;border:none;outline:none;border-bottom:1px dashed var(--ink-light);padding:2px 6px;min-width:200px}
+#doc-title:focus{border-bottom-color:var(--accent)}
+.toolbar{padding:10px 48px;border-bottom:1px solid var(--ink-light);display:flex;gap:6px;align-items:center;background:var(--paper);flex-wrap:wrap}
+.toolbar button{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 10px;border:1px solid var(--ink-light);background:transparent;color:var(--ink-mid);cursor:pointer;border-radius:2px;transition:all .1s;white-space:nowrap}
+.toolbar button:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.toolbar button.docs-btn{border-color:var(--accent);color:var(--accent)}
+.toolbar button.docs-btn:hover,.toolbar button.docs-btn.active{background:var(--accent);color:white;border-color:var(--accent)}
+.toolbar-sep{width:1px;height:18px;background:var(--ink-light);margin:0 4px}
+.hint{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-light)}
+#outline-container{flex:1;padding:32px 48px 80px;max-width:900px}
+.node{position:relative;line-height:var(--line-h)}
+.node-row{display:flex;align-items:flex-start;min-height:var(--line-h);border-radius:3px;transition:background .08s}
+.node-row:hover{background:rgba(0,0,0,.03)}
+.node-row.focused{background:var(--accent-soft)}
+.bullet-wrap{width:26px;min-width:26px;height:var(--line-h);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;position:relative}
+.bullet{width:7px;height:7px;border-radius:50%;background:var(--ink-light);transition:background .15s,transform .15s}
+.bullet-wrap:hover .bullet{background:var(--accent);transform:scale(1.3)}
+.node.has-children>.node-row .bullet{background:var(--ink);border-radius:2px}
+.node.collapsed>.node-row .bullet{background:var(--accent);border-radius:50%}
+.node.has-children>.node-row .bullet-wrap::after{content:'';position:absolute;right:1px;top:50%;transform:translateY(-50%);border-left:4px solid var(--ink-light);border-top:3px solid transparent;border-bottom:3px solid transparent;transition:transform .15s}
+.node.has-children:not(.collapsed)>.node-row .bullet-wrap::after{transform:translateY(-50%) rotate(90deg)}
+.node-text{flex:1;min-height:var(--line-h);padding:3px 6px 3px 2px;font-family:'Lora',serif;font-size:17px;font-weight:400;color:var(--ink);line-height:1.55;outline:none;white-space:pre-wrap;word-break:break-word;caret-color:var(--accent)}
+.node-text:empty::before{content:attr(data-placeholder);color:var(--ink-light);font-style:italic;pointer-events:none}
+.type-badge{flex-shrink:0;align-self:flex-start;margin-top:6px;margin-right:3px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;padding:1px 5px;border-radius:2px;border:1px solid;line-height:1.5;white-space:nowrap;cursor:default}
+.type-badge.t-rss{color:#b8541f;border-color:#e0a878;background:#faf0e6}
+.type-badge.t-include{color:#2f6f4f;border-color:#8fc0a8;background:#eaf5ef}
+.type-badge.t-link{color:#3a5f8a;border-color:#9fb8d4;background:#eaf0f7}
+.type-badge.t-other{color:var(--ink-mid);border-color:var(--ink-light);background:var(--paper)}
+/* Inclusion: an includable node (type=include, or a link to a .opml file) that
+   isn't loaded yet gets a right-pointing marker; expanded transcluded content
+   is shown read-only and dimmed. */
+.node.includable>.node-row .bullet{background:var(--accent);border-radius:2px}
+.node.includable>.node-row .bullet-wrap{cursor:pointer}
+.node.includable:not(.included):not(.has-children)>.node-row .bullet-wrap::after{content:'';position:absolute;right:1px;top:50%;transform:translateY(-50%);border-left:4px solid var(--ink-light);border-top:3px solid transparent;border-bottom:3px solid transparent}
+.node.transcluded>.node-row .node-text{color:var(--ink-light);font-style:italic}
+.node.transcluded>.node-row{opacity:.9}
+.children.included-children{border-left-style:dashed;border-left-color:rgba(192,57,43,.35)}
+/* Depth styles are injected by applyRules() from the RULES object */
+.children{padding-left:var(--indent);border-left:1px solid rgba(0,0,0,.08);margin-left:12px}
+.node.collapsed>.children{display:none}
+body.hoisted #hoist-bar{display:flex}
+#hoist-bar{display:none;padding:8px 48px;background:var(--ink);color:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:12px;align-items:center;gap:12px}
+#hoist-bar button{background:var(--accent);color:white;border:none;padding:3px 10px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px;border-radius:2px}
+#status{position:fixed;bottom:0;left:0;right:0;background:var(--ink);color:var(--ink-light);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 48px;display:flex;gap:24px}
+#status span{color:var(--paper)}
+.node-row.drag-over-above{border-top:2px solid var(--accent)}
+.node-row.drag-over-below{border-bottom:2px solid var(--accent)}
+.node.dragging{opacity:.35}
+
+/* Read-only mode */
+body.readonly #doc-info{display:none}
+body.readonly .toolbar button:not(.docs-btn):not(#readonly-badge):not(#inspect-toggle-btn){opacity:.35;pointer-events:none}
+#readonly-badge{display:none;border-color:#5a8a5a;color:#5a8a5a;pointer-events:none}
+body.readonly #readonly-badge{display:inline-block}
+body.readonly #doc-title{pointer-events:none}
+#url-source{display:none;padding:5px 48px;background:#eef4ee;border-bottom:1px solid #bbd4bb;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#3a6a3a}
+#url-source a{color:#3a6a3a;text-decoration:underline}
+body.readonly #url-source{display:block}
+
+/* Doc info bar */
+#doc-info{padding:6px 48px;background:var(--paper);border-bottom:1px solid var(--ink-light);display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.doc-field{display:flex;align-items:center;gap:6px}
+.doc-field label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-light);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.doc-field input{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-mid);background:transparent;border:none;outline:none;border-bottom:1px dashed transparent;padding:1px 4px;min-width:120px;transition:border-color .1s}
+.doc-field input:focus{border-bottom-color:var(--accent)}
+.doc-field input[readonly]{color:var(--ink-light);min-width:160px;cursor:default}
+
+/* Docs panel */
+#docs-panel{position:fixed;top:108px;right:24px;width:320px;max-height:calc(100vh - 140px);background:var(--paper);border:2px solid var(--ink);box-shadow:5px 5px 0 var(--ink);display:flex;flex-direction:column;z-index:100}
+#docs-panel.hidden{display:none}
+#docs-panel-header{padding:8px 12px;background:var(--ink);color:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:11px;display:flex;align-items:center;justify-content:space-between;cursor:move;user-select:none;letter-spacing:.05em}
+#docs-panel-header button{background:none;border:none;color:var(--paper);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;opacity:.7}
+#docs-panel-header button:hover{opacity:1}
+#docs-panel-body{overflow-y:auto;padding:12px 14px;flex:1;font-size:13px}
+.docs-node{padding:1px 0}
+.docs-row{display:flex;align-items:flex-start;gap:6px;padding:1px 0;line-height:1.5}
+.docs-tri{flex-shrink:0;width:10px;margin-top:5px;cursor:pointer}
+.docs-tri svg{display:block;transition:transform .15s}
+.docs-tri.open svg{transform:rotate(90deg)}
+.docs-dot{flex-shrink:0;width:10px;display:flex;align-items:center;justify-content:center;margin-top:8px}
+.docs-dot span{display:block;width:4px;height:4px;border-radius:50%;background:var(--ink-light)}
+.docs-text{color:var(--ink);line-height:1.5}
+.docs-depth-0>.docs-row>.docs-text{font-weight:500;font-size:13px}
+.docs-depth-1>.docs-row>.docs-text{font-size:12px}
+.docs-depth-2>.docs-row>.docs-text{font-size:12px;color:var(--ink-mid)}
+.docs-children{padding-left:14px;border-left:1px solid rgba(0,0,0,.07);margin-left:4px}
+
+/* Inspector panel ("suitcase") */
+#inspector-panel{position:fixed;top:108px;left:24px;width:330px;max-height:calc(100vh - 140px);background:var(--paper);border:2px solid var(--ink);box-shadow:5px 5px 0 var(--ink);display:flex;flex-direction:column;z-index:100}
+#inspector-panel.hidden{display:none}
+#inspector-panel-header{padding:8px 12px;background:var(--ink);color:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:11px;display:flex;align-items:center;justify-content:space-between;cursor:move;user-select:none;letter-spacing:.05em}
+#inspector-panel-header button{background:none;border:none;color:var(--paper);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;opacity:.7}
+#inspector-panel-header button:hover{opacity:1}
+#inspector-panel-body{overflow-y:auto;padding:12px 14px;flex:1;font-size:12px}
+.insp-empty{color:var(--ink-light);font-style:italic;font-family:'Lora',serif;font-size:13px}
+.insp-nodetext{font-family:'Lora',serif;font-size:14px;color:var(--ink);padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid var(--ink-light);word-break:break-word}
+.insp-field{margin-bottom:9px}
+.insp-field label{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-light);margin-bottom:2px}
+.insp-field input,.insp-field select,.insp-field textarea{width:100%;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink);background:var(--bg);border:1px solid var(--ink-light);border-radius:2px;padding:3px 5px;outline:none}
+.insp-field input:focus,.insp-field select:focus,.insp-field textarea:focus{border-color:var(--accent)}
+.insp-field textarea{resize:vertical;min-height:40px;line-height:1.4}
+.insp-section{margin-top:12px;padding-top:8px;border-top:1px dashed var(--ink-light)}
+.insp-section-title{font-family:'IBM Plex Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-light);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+.insp-kv{display:flex;gap:4px;margin-bottom:5px;align-items:center}
+.insp-kv input{color:var(--ink);background:var(--bg);border:1px solid var(--ink-light);border-radius:2px;padding:3px 5px;outline:none;font-family:'IBM Plex Mono',monospace;font-size:11px}
+.insp-kv input:focus{border-color:var(--accent)}
+.insp-kv input.insp-key{flex:0 0 38%}
+.insp-kv input.insp-val{flex:1;min-width:0}
+.insp-del{flex:0 0 auto;background:none;border:none;color:var(--ink-light);cursor:pointer;font-size:15px;padding:0 3px;line-height:1}
+.insp-del:hover{color:var(--accent)}
+.insp-none{color:var(--ink-light);font-style:italic;font-size:11px}
+.insp-addbtn{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 8px;border:1px solid var(--ink-light);background:transparent;color:var(--ink-mid);cursor:pointer;border-radius:2px}
+.insp-addbtn:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+/* Suitcase icon on node rows */
+.insp-icon{width:22px;min-width:22px;height:var(--line-h);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .1s;font-size:12px;flex-shrink:0;align-self:flex-start}
+.node-row:hover .insp-icon,.node-row.focused .insp-icon{opacity:.45}
+.node.has-attrs>.node-row .insp-icon{opacity:.7}
+.insp-icon:hover{opacity:1}
+body.readonly .insp-addbtn,body.readonly .insp-del{display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Outliner</h1>
+  <input id="doc-title" type="text" value="Untitled" placeholder="Document title" spellcheck="false">
+  <span id="version-badge">v0.6.0</span>
+</header>
+
+<div id="doc-info">
+  <div class="doc-field">
+    <label>Owner</label>
+    <input id="meta-owner-name" type="text" placeholder="Your name" spellcheck="false">
+  </div>
+  <div class="doc-field">
+    <label>Email</label>
+    <input id="meta-owner-email" type="text" placeholder="your@email.com" spellcheck="false">
+  </div>
+  <div class="doc-field">
+    <label>Created</label>
+    <input id="meta-date-created" type="text" readonly tabindex="-1">
+  </div>
+  <div class="doc-field">
+    <label>Modified</label>
+    <input id="meta-date-modified" type="text" readonly tabindex="-1">
+  </div>
+</div>
+
+<div id="hoist-bar">
+  <span>Hoisted into: <strong id="hoist-label"></strong></span>
+  <button onclick="dehoist()">&#8593; Dehoist</button>
+</div>
+
+<div class="toolbar">
+  <button onclick="indentSelected()">&#8594; Indent</button>
+  <button onclick="outdentSelected()">&#8592; Outdent</button>
+  <div class="toolbar-sep"></div>
+  <button onclick="moveUp()">&#8593; Move Up</button>
+  <button onclick="moveDown()">&#8595; Move Down</button>
+  <div class="toolbar-sep"></div>
+  <button onclick="collapseAll()">Collapse All</button>
+  <button onclick="expandAll()">Expand All</button>
+  <div class="toolbar-sep"></div>
+  <button onclick="hoistSelected()">Hoist</button>
+  <div class="toolbar-sep"></div>
+  <button onclick="exportOPML()">Export OPML</button>
+  <button onclick="importOPML()">Import OPML</button>
+  <input type="file" id="opml-file" accept=".opml,.xml" style="display:none" onchange="handleOPMLFile(event)">
+  <div class="toolbar-sep"></div>
+  <button onclick="addFeed()">+ Add feed</button>
+  <button onclick="addInclusion()">+ Add include</button>
+  <button id="inspect-toggle-btn" onclick="toggleInspector()">&#129523; Inspect</button>
+  <button class="docs-btn active" id="docs-toggle-btn" onclick="toggleDocs()">? Docs</button>
+  <button id="readonly-badge">&#128274; Read-only</button>
+  <div class="hint">Tab/Shift-Tab &middot; Alt-&#8597; move &middot; Alt-click bullet to hoist</div>
+</div>
+
+<div id="url-source">Viewing: <a id="url-source-link" href="" target="_blank"></a></div>
+
+<div id="outline-container"></div>
+
+<div id="docs-panel">
+  <div id="docs-panel-header">
+    <span>DOCS</span>
+    <button onclick="toggleDocs()" title="Close">&#215;</button>
+  </div>
+  <div id="docs-panel-body"></div>
+</div>
+
+<div id="inspector-panel" class="hidden">
+  <div id="inspector-panel-header">
+    <span>&#129523; INSPECTOR</span>
+    <button onclick="toggleInspector()" title="Close">&#215;</button>
+  </div>
+  <div id="inspector-panel-body"></div>
+</div>
+
+<div id="status">Nodes: <span id="st-nodes">0</span> &nbsp;&middot;&nbsp; Max depth: <span id="st-depth">0</span> &nbsp;&middot;&nbsp; <span id="st-msg">Ready</span></div>
+
+<script>
+// ── Embedded docs ─────────────────────────────────────────────────────────────
+const DOCS = [
+  { text: "Getting started", children: [
+    { text: "Click any node to edit it" },
+    { text: "Enter creates a new sibling below" },
+    { text: "Backspace on an empty node deletes it" },
+  ]},
+  { text: "Keyboard shortcuts", children: [
+    { text: "Enter \u2014 new sibling below" },
+    { text: "Tab \u2014 indent node" },
+    { text: "Shift-Tab \u2014 outdent node" },
+    { text: "Alt-\u2191 / Alt-\u2193 \u2014 move node up / down" },
+    { text: "Arrow keys \u2014 navigate" },
+    { text: "Backspace on empty \u2014 delete" },
+  ]},
+  { text: "Mouse", children: [
+    { text: "Click bullet \u2014 collapse / expand" },
+    { text: "Alt-click bullet \u2014 hoist into node" },
+    { text: "Drag rows to reorder" },
+  ]},
+  { text: "Hoist", children: [
+    { text: "Focuses the view into one subtree" },
+    { text: "Alt-click any bullet, or select a node and click Hoist" },
+    { text: "Click \u2191 Dehoist in the bar to return" },
+    { text: "Hoist stacks: you can hoist inside a hoist" },
+  ]},
+  { text: "Files", children: [
+    { text: "Export OPML \u2014 saves your outline as an OPML file" },
+    { text: "Head fields included: title, ownerName, ownerEmail, dateCreated, dateModified, expansionState" },
+    { text: "expansionState records which nodes are expanded so the outline opens exactly as you left it" },
+    { text: "Import OPML \u2014 loads an OPML file, restoring all head fields including expansionState" },
+    { text: "All node attributes are preserved on import and export \u2014 nothing is dropped" },
+    { text: "Compatible with files from Drummer and Frontier" },
+  ]},
+  { text: "Feeds & subscription lists", children: [
+    { text: "Add feed \u2014 turns a node into an RSS feed (type=\"rss\") from a feed URL" },
+    { text: "Cursor on an empty node: it becomes the feed. Otherwise a new feed node is added below." },
+    { text: "The feed URL is stored as the xmlUrl attribute (required by the OPML spec)" },
+    { text: "The app tries to read the feed to fill in title, htmlUrl, description, language" },
+    { text: "If the feed can't be fetched (e.g. CORS), the node is still created \u2014 fill in details via the Inspector" },
+    { text: "An outline of feed nodes exports as a valid OPML subscription list" },
+  ]},
+  { text: "Inspector (\ud83e\uddf3 attributes)", children: [
+    { text: "Click the \ud83e\uddf3 icon on a row, or the Inspect button, to view a node's OPML attributes" },
+    { text: "Set the node type: rss, include, link, or none" },
+    { text: "Edit known attributes (xmlUrl, htmlUrl, title, description, language, version) in labeled fields" },
+    { text: "Add any custom attribute in the Other attributes list" },
+    { text: "A type badge appears on the node so feeds and includes are easy to spot" },
+  ]},
+  { text: "Inclusion (linking OPML files)", children: [
+    { text: "Add include \u2014 creates a node (type=\"include\") whose url points to another OPML file" },
+    { text: "Use it to compose one OPML file out of others, e.g. a list of subscription lists" },
+    { text: "The url attribute is required; the app tries to read the file's title to label the node" },
+    { text: "type=\"link\" nodes also carry a url \u2014 a link may point to a web page, while include always points to OPML" },
+    { text: "Both types round-trip losslessly on import and export" },
+    { text: "Click an include node's bullet (or a link to a .opml file) to expand it in place \u2014 the referenced OPML is shown read-only" },
+    { text: "Included content is a live view (transclusion): it is never written into your file on export or save" },
+  ]},
+  { text: "URL viewer mode", children: [
+    { text: "Add ?url= to the address to open any public OPML file in read-only mode" },
+    { text: "Example: outliner.html?url=https://example.com/outline.opml" },
+    { text: "The outline is fully navigable: collapse, expand, hoist all work" },
+    { text: "Editing is disabled \u2014 a lock badge appears in the toolbar" },
+    { text: "The source URL is shown in a bar below the toolbar" },
+    { text: "Export OPML still works \u2014 you can save a local copy" },
+  ]},
+];
+
+// ── Metadata ──────────────────────────────────────────────────────────────────
+let meta = {
+  dateCreated: new Date().toUTCString(),
+  dateModified: new Date().toUTCString(),
+  ownerName: '',
+  ownerEmail: '',
+};
+
+function refreshMetaUI() {
+  document.getElementById('meta-owner-name').value  = meta.ownerName;
+  document.getElementById('meta-owner-email').value = meta.ownerEmail;
+  document.getElementById('meta-date-created').value  = fmtDate(meta.dateCreated);
+  document.getElementById('meta-date-modified').value = fmtDate(meta.dateModified);
+}
+
+function fmtDate(s) {
+  if (!s) return '';
+  try { return new Date(s).toLocaleString(); } catch(e) { return s; }
+}
+
+function touchModified() {
+  meta.dateModified = new Date().toUTCString();
+  document.getElementById('meta-date-modified').value = fmtDate(meta.dateModified);
+}
+
+document.getElementById('meta-owner-name').addEventListener('input',  e => { meta.ownerName  = e.target.value; touchModified(); saveStateSoon(); });
+document.getElementById('meta-owner-email').addEventListener('input', e => { meta.ownerEmail = e.target.value; touchModified(); saveStateSoon(); });
+document.getElementById('doc-title').addEventListener('input', () => saveStateSoon());
+
+// ── Docs panel ────────────────────────────────────────────────────────────────
+let docsVisible = true;
+
+function renderDocsNode(n, depth) {
+  const wrap = document.createElement('div');
+  wrap.className = `docs-node docs-depth-${depth}`;
+  const row = document.createElement('div');
+  row.className = 'docs-row';
+  if (n.children && n.children.length) {
+    const tri = document.createElement('div');
+    tri.className = 'docs-tri open';
+    tri.innerHTML = '<svg width="8" height="8" viewBox="0 0 8 8"><polygon points="1,1 7,4 1,7" fill="var(--ink)"/></svg>';
+    tri.dataset.open = 'true';
+    row.appendChild(tri);
+    const txt = document.createElement('span');
+    txt.className = 'docs-text'; txt.textContent = n.text;
+    row.appendChild(txt);
+    wrap.appendChild(row);
+    const ch = document.createElement('div');
+    ch.className = 'docs-children';
+    n.children.forEach(c => ch.appendChild(renderDocsNode(c, depth + 1)));
+    wrap.appendChild(ch);
+    tri.addEventListener('click', () => {
+      const open = tri.classList.toggle('open');
+      ch.style.display = open ? '' : 'none';
+    });
+  } else {
+    const dot = document.createElement('div');
+    dot.className = 'docs-dot';
+    dot.innerHTML = '<span></span>';
+    row.appendChild(dot);
+    const txt = document.createElement('span');
+    txt.className = 'docs-text'; txt.textContent = n.text;
+    row.appendChild(txt);
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function buildDocsPanel() {
+  const body = document.getElementById('docs-panel-body');
+  body.innerHTML = '';
+  DOCS.forEach(n => body.appendChild(renderDocsNode(n, 0)));
+}
+
+function toggleDocs() {
+  docsVisible = !docsVisible;
+  document.getElementById('docs-panel').classList.toggle('hidden', !docsVisible);
+  document.getElementById('docs-toggle-btn').classList.toggle('active', docsVisible);
+}
+
+(function() {
+  const panel = document.getElementById('docs-panel');
+  const hdr   = document.getElementById('docs-panel-header');
+  let ox=0,oy=0,dragging=false;
+  hdr.addEventListener('mousedown', e => {
+    if (e.target.tagName === 'BUTTON') return;
+    dragging=true; panel.style.right='auto';
+    ox=e.clientX-panel.offsetLeft; oy=e.clientY-panel.offsetTop;
+  });
+  document.addEventListener('mousemove', e => { if(dragging){panel.style.left=(e.clientX-ox)+'px';panel.style.top=(e.clientY-oy)+'px';} });
+  document.addEventListener('mouseup', () => { dragging=false; });
+})();
+
+// ── Attribute inspector ("suitcase") ──────────────────────────────────────────
+// A floating panel bound to the focused node. Known attributes for the node's
+// type get friendly labeled fields; every other attribute is shown in a generic
+// key/value list so nothing is ever hidden. This is the edit surface for OPML
+// subscription-list attributes (Milestone 1) and inclusion attributes (Milestone 2).
+let inspectorVisible=false;
+const KNOWN_FIELDS={
+  rss:['xmlUrl','htmlUrl','title','description','language','version'],
+  include:['url'],
+  link:['url'],
+};
+const TYPE_OPTIONS=['','rss','include','link'];
+
+function nodeHasAttrs(node){return !!(node.attributes&&Object.keys(node.attributes).length)}
+function updateNodeAttrClass(node){
+  const el=document.querySelector(`.node[data-id="${node.id}"]`);
+  if(el) el.classList.toggle('has-attrs',nodeHasAttrs(node));
+}
+
+function toggleInspector(){
+  inspectorVisible=!inspectorVisible;
+  document.getElementById('inspector-panel').classList.toggle('hidden',!inspectorVisible);
+  document.getElementById('inspect-toggle-btn').classList.toggle('active',inspectorVisible);
+  if(inspectorVisible) renderInspector();
+}
+function openInspectorFor(node){
+  focusedId=node.id;
+  if(!inspectorVisible){
+    inspectorVisible=true;
+    document.getElementById('inspector-panel').classList.remove('hidden');
+    document.getElementById('inspect-toggle-btn').classList.add('active');
+  }
+  updateFocusHighlight();
+  renderInspector();
+}
+
+// Value edit on an existing field: update model in place, no re-render (keeps caret).
+function setAttrValue(node,key,val){
+  if(val==='') delete node.attributes[key]; else node.attributes[key]=val;
+  touchModified(); updateNodeAttrClass(node); saveStateSoon();
+}
+// Structural change (type/add/delete/rename): rebuild the panel.
+function afterAttrStructuralChange(node){
+  touchModified(); updateNodeAttrClass(node); renderInspector(); saveStateSoon();
+}
+function renameAttr(node,oldKey,newKey){
+  newKey=newKey.trim();
+  if(newKey===oldKey) return;
+  const val=node.attributes[oldKey];
+  delete node.attributes[oldKey];
+  if(newKey&&newKey!=='text') node.attributes[newKey]=val; // rename to blank = delete
+  afterAttrStructuralChange(node);
+}
+function addBlankAttr(node){
+  let base='attr',name=base,i=1;
+  while(name in node.attributes) name=base+(i++);
+  node.attributes[name]='';
+  afterAttrStructuralChange(node);
+  const keys=document.querySelectorAll('#inspector-panel-body .insp-kv .insp-key');
+  const last=keys[keys.length-1];
+  if(last){last.focus();last.select();}
+}
+
+function renderInspector(){
+  const body=document.getElementById('inspector-panel-body');
+  const node=getFocusedNode();
+  body.innerHTML='';
+  if(!node){
+    const e=document.createElement('div');
+    e.className='insp-empty'; e.textContent='Select a node to inspect its attributes.';
+    body.appendChild(e); return;
+  }
+  node.attributes=node.attributes||{};
+
+  const preview=document.createElement('div');
+  preview.className='insp-nodetext'; preview.textContent=node.text||'(untitled)';
+  body.appendChild(preview);
+
+  // Type selector
+  const curType=node.attributes.type||'';
+  const tf=document.createElement('div'); tf.className='insp-field';
+  const tl=document.createElement('label'); tl.textContent='Type'; tf.appendChild(tl);
+  const sel=document.createElement('select'); sel.disabled=readOnly;
+  const opts=[...TYPE_OPTIONS]; if(curType&&!opts.includes(curType)) opts.push(curType);
+  opts.forEach(v=>{
+    const o=document.createElement('option'); o.value=v;
+    o.textContent=v===''?'(none)':v; if(v===curType)o.selected=true; sel.appendChild(o);
+  });
+  sel.addEventListener('change',()=>{
+    if(sel.value==='') delete node.attributes.type; else node.attributes.type=sel.value;
+    afterAttrStructuralChange(node);
+  });
+  tf.appendChild(sel); body.appendChild(tf);
+
+  // Known fields for the current type
+  const known=KNOWN_FIELDS[curType]||[];
+  known.forEach(k=>{
+    const f=document.createElement('div'); f.className='insp-field';
+    const lab=document.createElement('label'); lab.textContent=k; f.appendChild(lab);
+    const useArea=(k==='description');
+    const inp=document.createElement(useArea?'textarea':'input');
+    if(!useArea) inp.type='text';
+    inp.value=node.attributes[k]||''; inp.disabled=readOnly;
+    if(curType==='rss'&&k==='xmlUrl') inp.placeholder='http://… (required)';
+    else if(k==='url') inp.placeholder='http://… (required)';
+    inp.addEventListener('input',()=>setAttrValue(node,k,inp.value));
+    f.appendChild(inp); body.appendChild(f);
+  });
+
+  // Generic "other attributes" list -- everything not shown above
+  const otherKeys=Object.keys(node.attributes).filter(k=>k!=='type'&&k!=='text'&&!known.includes(k));
+  const sec=document.createElement('div'); sec.className='insp-section';
+  const st=document.createElement('div'); st.className='insp-section-title';
+  const stl=document.createElement('span'); stl.textContent='Other attributes'; st.appendChild(stl);
+  if(!readOnly){
+    const add=document.createElement('button');
+    add.className='insp-addbtn'; add.textContent='+ Add';
+    add.addEventListener('click',()=>addBlankAttr(node));
+    st.appendChild(add);
+  }
+  sec.appendChild(st);
+  otherKeys.forEach(k=>{
+    const row=document.createElement('div'); row.className='insp-kv';
+    const ki=document.createElement('input'); ki.className='insp-key'; ki.value=k; ki.placeholder='name'; ki.disabled=readOnly;
+    const vi=document.createElement('input'); vi.className='insp-val'; vi.value=node.attributes[k]; vi.placeholder='value'; vi.disabled=readOnly;
+    ki.addEventListener('change',()=>renameAttr(node,k,ki.value));
+    vi.addEventListener('input',()=>{node.attributes[k]=vi.value;touchModified();updateNodeAttrClass(node);saveStateSoon()});
+    row.appendChild(ki); row.appendChild(vi);
+    if(!readOnly){
+      const del=document.createElement('button'); del.className='insp-del'; del.innerHTML='&times;'; del.title='Delete attribute';
+      del.addEventListener('click',()=>{delete node.attributes[k];afterAttrStructuralChange(node)});
+      row.appendChild(del);
+    }
+    sec.appendChild(row);
+  });
+  if(!otherKeys.length){
+    const none=document.createElement('div'); none.className='insp-none'; none.textContent='none';
+    sec.appendChild(none);
+  }
+  body.appendChild(sec);
+}
+
+// Inspector panel drag (mirror of the docs panel)
+(function() {
+  const panel=document.getElementById('inspector-panel');
+  const hdr=document.getElementById('inspector-panel-header');
+  let ox=0,oy=0,dragging=false;
+  hdr.addEventListener('mousedown', e=>{
+    if(e.target.tagName==='BUTTON') return;
+    dragging=true;
+    ox=e.clientX-panel.offsetLeft; oy=e.clientY-panel.offsetTop;
+  });
+  document.addEventListener('mousemove', e=>{ if(dragging){panel.style.left=(e.clientX-ox)+'px';panel.style.top=(e.clientY-oy)+'px';} });
+  document.addEventListener('mouseup', ()=>{ dragging=false; });
+})();
+
+// ── Outliner model ────────────────────────────────────────────────────────────
+let idCounter=0;
+const newId=()=>++idCounter;
+function makeNode(text='',children=[],attributes={}){return{id:newId(),text,children,collapsed:false,attributes}}
+let root={id:0,text:'__root__',children:[],collapsed:false};
+let hoistStack=[],focusedId=null;
+function getDisplayRoot(){return hoistStack.length?hoistStack[hoistStack.length-1].node:root}
+
+function render(){
+  const c=document.getElementById('outline-container'),dr=getDisplayRoot();
+  c.innerHTML='';
+  dr.children.forEach(n=>c.appendChild(renderNode(n,0)));
+  updateStatus();
+  saveStateSoon();
+}
+function renderNode(node,depth){
+  const div=document.createElement('div');
+  const ro = readOnly || !!node.transcluded;   // transcluded (included) rows are view-only
+  div.className='node'+(node.children.length?' has-children':'')+(node.collapsed?' collapsed':'')+(nodeHasAttrs(node)?' has-attrs':'')+(isIncludable(node)?' includable':'')+(node.included?' included':'')+(node.transcluded?' transcluded':'');
+  div.dataset.id=node.id; div.dataset.depth=depth;
+  const row=document.createElement('div');
+  row.className='node-row'+(node.id===focusedId?' focused':'');
+  const bw=document.createElement('div'); bw.className='bullet-wrap';
+  bw.title='Click: collapse/expand  Alt-click: hoist';
+  const bullet=document.createElement('div'); bullet.className='bullet';
+  bw.appendChild(bullet);
+  bw.addEventListener('click',e=>{
+    if(e.altKey){hoistNode(node);return}
+    if(node.children.length){node.collapsed=!node.collapsed;render();return}
+    if(isIncludable(node)&&!node.included){expandInclusion(node)}
+  });
+  const span=document.createElement('div');
+  span.className='node-text'; span.contentEditable= ro ? 'false' : 'true'; span.spellcheck=true;
+  span.dataset.placeholder=depth===0?'Start typing\u2026':'\u2026';
+  span.textContent=node.text;
+  span.addEventListener('focus',()=>{focusedId=node.id;updateFocusHighlight()});
+  span.addEventListener('blur',()=>{node.text=span.textContent;touchModified();updateStatus()});
+  span.addEventListener('input',()=>{node.text=span.textContent;saveStateSoon()});
+  span.addEventListener('keydown',e=>{
+    if(ro){
+      // allow navigation only
+      if(!e.altKey&&e.key==='ArrowUp'){const p=getPrevVisible(node);if(p){e.preventDefault();focusNode(p.id)}}
+      if(!e.altKey&&e.key==='ArrowDown'){const n2=getNextVisible(node);if(n2){e.preventDefault();focusNode(n2.id)}}
+      e.preventDefault(); return;
+    }
+    if(e.key==='Enter'&&!e.shiftKey){
+      e.preventDefault(); node.text=span.textContent;
+      const parent=findParent(root,node.id); if(!parent)return;
+      const idx=parent.children.indexOf(node),nn=makeNode();
+      parent.children.splice(idx+1,0,nn); render(); focusNode(nn.id);
+    }
+    if(e.key==='Tab'){e.preventDefault();e.shiftKey?outdentNode(node):indentNode(node)}
+    if(e.key==='Backspace'&&span.textContent===''){e.preventDefault();deleteNode(node)}
+    if(e.altKey&&e.key==='ArrowUp'){e.preventDefault();moveNodeUp(node)}
+    if(e.altKey&&e.key==='ArrowDown'){e.preventDefault();moveNodeDown(node)}
+    if(!e.altKey&&e.key==='ArrowUp'){const p=getPrevVisible(node);if(p){e.preventDefault();focusNode(p.id)}}
+    if(!e.altKey&&e.key==='ArrowDown'){const n2=getNextVisible(node);if(n2){e.preventDefault();focusNode(n2.id)}}
+    // Cmd-U/D/L/R -- classic outliner shortcuts (also Ctrl on Windows/Linux)
+    const cmdKey = e.metaKey || e.ctrlKey;
+    if(cmdKey&&e.key==='u'){e.preventDefault();moveNodeUp(node)}
+    if(cmdKey&&e.key==='d'){e.preventDefault();moveNodeDown(node)}
+    if(cmdKey&&e.key==='l'){e.preventDefault();outdentNode(node)}
+    if(cmdKey&&e.key==='r'){e.preventDefault();indentNode(node)}
+  });
+  row.draggable=!ro;
+  row.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',node.id);setTimeout(()=>div.classList.add('dragging'),0)});
+  row.addEventListener('dragend',()=>div.classList.remove('dragging'));
+  row.addEventListener('dragover',e=>{
+    e.preventDefault();
+    const mid=row.getBoundingClientRect().top+row.getBoundingClientRect().height/2;
+    row.classList.remove('drag-over-above','drag-over-below');
+    row.classList.add(e.clientY<mid?'drag-over-above':'drag-over-below');
+  });
+  row.addEventListener('dragleave',()=>row.classList.remove('drag-over-above','drag-over-below'));
+  row.addEventListener('drop',e=>{
+    e.preventDefault();
+    const dragId=parseInt(e.dataTransfer.getData('text/plain')),dragNode=findNode(root,dragId);
+    const above=e.clientY<row.getBoundingClientRect().top+row.getBoundingClientRect().height/2;
+    if(dragNode&&dragNode.id!==node.id){
+      removeNode(root,dragId);
+      const parent=findParent(root,node.id);
+      if(parent){const idx=parent.children.indexOf(node);parent.children.splice(above?idx:idx+1,0,dragNode)}
+      render(); focusNode(dragNode.id);
+    }
+    row.classList.remove('drag-over-above','drag-over-below');
+  });
+  const inspIcon=document.createElement('div');
+  inspIcon.className='insp-icon'; inspIcon.textContent='\u{1F9F3}';
+  inspIcon.title='Inspect attributes';
+  inspIcon.addEventListener('click',e=>{e.stopPropagation();openInspectorFor(node)});
+  let typeBadge=null;
+  const nodeType=node.attributes&&node.attributes.type;
+  if(nodeType){
+    typeBadge=document.createElement('span');
+    const t=nodeType.toLowerCase();
+    typeBadge.className='type-badge '+(['rss','include','link'].includes(t)?'t-'+t:'t-other');
+    typeBadge.textContent=nodeType; typeBadge.title='type="'+nodeType+'"';
+  }
+  row.appendChild(bw);
+  if(typeBadge) row.appendChild(typeBadge);
+  row.appendChild(span); row.appendChild(inspIcon); div.appendChild(row);
+  if(node.children.length){
+    const ch=document.createElement('div'); ch.className='children'+(node.included?' included-children':'');
+    node.children.forEach(c=>ch.appendChild(renderNode(c,depth+1)));
+    div.appendChild(ch);
+  }
+  return div;
+}
+function updateFocusHighlight(){
+  document.querySelectorAll('.node-row').forEach(r=>{
+    const id=parseInt(r.closest('.node').dataset.id);
+    r.classList.toggle('focused',id===focusedId);
+  });
+  if(inspectorVisible) renderInspector();
+}
+function findNode(node,id){
+  if(node.id===id)return node;
+  for(const c of node.children){const f=findNode(c,id);if(f)return f}
+  return null;
+}
+function findParent(node,id){
+  for(const c of node.children){
+    if(c.id===id)return node;
+    const f=findParent(c,id); if(f)return f;
+  }
+  return null;
+}
+function removeNode(node,id){
+  const idx=node.children.findIndex(c=>c.id===id);
+  if(idx!==-1){node.children.splice(idx,1);return true}
+  return node.children.some(c=>removeNode(c,id));
+}
+function flatVisible(dr){
+  const list=[];
+  function walk(n){list.push(n);if(!n.collapsed)n.children.forEach(walk)}
+  dr.children.forEach(walk); return list;
+}
+function getPrevVisible(node){const flat=flatVisible(getDisplayRoot()),i=flat.findIndex(n=>n.id===node.id);return i>0?flat[i-1]:null}
+function getNextVisible(node){const flat=flatVisible(getDisplayRoot()),i=flat.findIndex(n=>n.id===node.id);return i<flat.length-1?flat[i+1]:null}
+function focusNode(id){
+  focusedId=id; render();
+  const el=document.querySelector(`.node[data-id="${id}"] .node-text`);
+  if(el){el.focus();const r=document.createRange(),s=window.getSelection();r.selectNodeContents(el);r.collapse(false);s.removeAllRanges();s.addRange(r)}
+}
+function getFocusedNode(){return focusedId?findNode(root,focusedId):null}
+function indentNode(node){
+  const parent=findParent(root,node.id); if(!parent)return;
+  const idx=parent.children.indexOf(node); if(idx===0)return;
+  const prev=parent.children[idx-1]; removeNode(root,node.id);
+  prev.collapsed=false; prev.children.push(node); render(); focusNode(node.id); msg('Indented');
+}
+function outdentNode(node){
+  const parent=findParent(root,node.id);
+  if(!parent||parent.id===0)return;
+  const gp=findParent(root,parent.id); if(!gp)return;
+  const pi=gp.children.indexOf(parent); removeNode(root,node.id);
+  gp.children.splice(pi+1,0,node); render(); focusNode(node.id); msg('Outdented');
+}
+function deleteNode(node){
+  const prev=getPrevVisible(node); removeNode(root,node.id); render();
+  if(prev)focusNode(prev.id); touchModified(); msg('Node deleted');
+}
+function moveNodeUp(node){
+  const parent=findParent(root,node.id); if(!parent)return;
+  const i=parent.children.indexOf(node); if(i===0)return;
+  parent.children.splice(i,1); parent.children.splice(i-1,0,node);
+  render(); focusNode(node.id); touchModified(); msg('Moved up');
+}
+function moveNodeDown(node){
+  const parent=findParent(root,node.id); if(!parent)return;
+  const i=parent.children.indexOf(node); if(i===parent.children.length-1)return;
+  parent.children.splice(i,1); parent.children.splice(i+1,0,node);
+  render(); focusNode(node.id); touchModified(); msg('Moved down');
+}
+function indentSelected(){const n=getFocusedNode();if(n)indentNode(n)}
+function outdentSelected(){const n=getFocusedNode();if(n)outdentNode(n)}
+function moveUp(){const n=getFocusedNode();if(n)moveNodeUp(n)}
+function moveDown(){const n=getFocusedNode();if(n)moveNodeDown(n)}
+function collapseAll(){
+  function walk(n){if(n.children.length){n.collapsed=true;n.children.forEach(walk)}}
+  getDisplayRoot().children.forEach(walk); render(); msg('Collapsed all');
+}
+function expandAll(){
+  function walk(n){n.collapsed=false;n.children.forEach(walk)}
+  getDisplayRoot().children.forEach(walk); render(); msg('Expanded all');
+}
+function hoistNode(node){
+  hoistStack.push({node}); document.body.classList.add('hoisted');
+  document.getElementById('hoist-label').textContent=node.text||'(untitled)';
+  render(); if(node.children.length)focusNode(node.children[0].id);
+  msg('Hoisted: '+(node.text||'(untitled)'));
+}
+function hoistSelected(){const n=getFocusedNode();if(n)hoistNode(n)}
+function dehoist(){
+  if(!hoistStack.length)return;
+  const{node}=hoistStack.pop();
+  if(!hoistStack.length)document.body.classList.remove('hoisted');
+  else document.getElementById('hoist-label').textContent=hoistStack[hoistStack.length-1].node.text;
+  render(); focusNode(node.id); msg('Dehoisted');
+}
+
+// ── OPML ──────────────────────────────────────────────────────────────────────
+function esc(s){return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+// Preferred attribute order for stable, spec-friendly output. text is always
+// first; known attributes follow in this order; any remaining custom attributes
+// are appended in insertion order so nothing is ever dropped.
+const ATTR_ORDER=['type','xmlUrl','htmlUrl','title','description','language','version','url','created','category'];
+function attrsToString(node){
+  let s=`text="${esc(node.text)}"`;
+  const attrs=node.attributes||{};
+  const keys=[...ATTR_ORDER.filter(k=>k in attrs),...Object.keys(attrs).filter(k=>!ATTR_ORDER.includes(k)&&k!=='text')];
+  for(const k of keys) s+=` ${k}="${esc(attrs[k])}"`;
+  return s;
+}
+function nodeToOPML(node,indent){
+  const pad=' '.repeat(indent);
+  // Transcluded (included) children are a live view of another file -- an
+  // include/link node is always written as just its reference, never its content.
+  const kids=node.included?[]:node.children;
+  if(!kids.length)return`${pad}<outline ${attrsToString(node)}/>`;
+  const out=kids.map(c=>nodeToOPML(c,indent+2)).join('\n');
+  return`${pad}<outline ${attrsToString(node)}>\n${out}\n${pad}</outline>`;
+}
+// Flag nodes that declare an OPML type but lack its required attribute, so a
+// subscription list / inclusion file can't be exported silently malformed.
+function collectIssues(node,issues){
+  const a=node.attributes||{};
+  const t=(a.type||'').toLowerCase();
+  if(t==='rss' && !(a.xmlUrl&&a.xmlUrl.trim()))
+    issues.push('"'+(node.text||'untitled')+'" is type rss but has no xmlUrl');
+  if((t==='include'||t==='link') && !(a.url&&a.url.trim()))
+    issues.push('"'+(node.text||'untitled')+'" is type '+t+' but has no url');
+  node.children.forEach(c=>collectIssues(c,issues));
+  return issues;
+}
+function exportOPML(){
+  touchModified();
+  const title=document.getElementById('doc-title').value||'Untitled';
+  const expansionState = calcExpansionState(root);
+  const lastCursorVal = focusedId ? calcLastCursor(root, focusedId) : 1;
+  const vertScrollVal = calcVertScrollState(root);
+  const headFields = [
+    `    <title>${esc(title)}</title>`,
+    meta.dateCreated  ? `    <dateCreated>${esc(meta.dateCreated)}</dateCreated>`   : '',
+    meta.dateModified ? `    <dateModified>${esc(meta.dateModified)}</dateModified>` : '',
+    meta.ownerName    ? `    <ownerName>${esc(meta.ownerName)}</ownerName>`          : '',
+    meta.ownerEmail   ? `    <ownerEmail>${esc(meta.ownerEmail)}</ownerEmail>`       : '',
+    expansionState    ? `    <expansionState>${esc(expansionState)}</expansionState>` : '',
+    `    <lastCursor>${lastCursorVal}</lastCursor>`,
+    `    <vertScrollState>${vertScrollVal}</vertScrollState>`,
+  ].filter(Boolean).join('\n');
+  const body=root.children.map(c=>nodeToOPML(c,4)).join('\n');
+  const opml=`<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n${headFields}\n  </head>\n  <body>\n${body}\n  </body>\n</opml>`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([opml],{type:'text/xml'}));
+  a.download=(title.replace(/\s+/g,'_')||'outline')+'.opml';
+  a.click();
+  const issues=collectIssues(root,[]);
+  if(issues.length) msg('Exported with '+issues.length+' warning'+(issues.length>1?'s':'')+': '+issues[0]);
+  else msg('Exported OPML');
+}
+function importOPML(){document.getElementById('opml-file').click()}
+function handleOPMLFile(e){
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const xml=new DOMParser().parseFromString(ev.target.result,'text/xml');
+      const get=tag=>{const el=xml.querySelector(`head > ${tag}`);return el?el.textContent:''};
+      document.getElementById('doc-title').value = get('title') || 'Untitled';
+      meta.dateCreated  = get('dateCreated')  || new Date().toUTCString();
+      meta.dateModified = get('dateModified') || new Date().toUTCString();
+      meta.ownerName    = get('ownerName')    || '';
+      meta.ownerEmail   = get('ownerEmail')   || '';
+      refreshMetaUI();
+      const body=xml.querySelector('body');
+      if(!body)throw new Error('No body element');
+      idCounter=0;
+      root={id:0,text:'__root__',children:Array.from(body.children).map(el=>parseOPMLNode(el)),collapsed:false};
+      hoistStack=[]; document.body.classList.remove('hoisted');
+      applyExpansionState(root, get('expansionState'));
+      render();
+      setTimeout(() => {
+        const vs = parseInt(get('vertScrollState')) || 1;
+        const lc = parseInt(get('lastCursor')) || 1;
+        applyVertScrollState(root, vs);
+        const cursorId = nodeIdAtLine(root, lc);
+        if (cursorId) focusNode(cursorId);
+        else if (root.children.length) focusNode(root.children[0].id);
+      }, 50);
+      msg('Opened: '+file.name);
+    }catch(err){msg('Error: '+err.message)}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+function parseOPMLNode(el){
+  const node=makeNode(el.getAttribute('text')||'');
+  // Preserve every attribute except text (which is stored separately) so any
+  // OPML file round-trips losslessly -- type, xmlUrl, htmlUrl, url, etc.
+  for(const a of el.attributes){ if(a.name!=='text') node.attributes[a.name]=a.value; }
+  Array.from(el.children).forEach(c=>node.children.push(parseOPMLNode(c)));
+  return node;
+}
+
+// ── Add feed (subscription list) ──────────────────────────────────────────────
+// Creates a type="rss" node with the required xmlUrl attribute, then makes a
+// best-effort attempt to read the feed and fill in title/htmlUrl/etc. The fetch
+// is wrapped so a CORS/network failure silently leaves a usable feed node.
+function clean(s){ return (s||'').replace(/\s+/g,' ').trim(); }
+function feedLabelFromUrl(url){
+  try{ return new URL(url).hostname.replace(/^www\./,''); }catch(e){ return url; }
+}
+function feedFirst(xmlDoc, local){
+  const els=xmlDoc.getElementsByTagName('*');
+  for(const n of els){ if((n.localName||'').toLowerCase()===local) return n; }
+  return null;
+}
+function parseFeedMeta(text){
+  try{
+    const xml=new DOMParser().parseFromString(text,'text/xml');
+    if(xml.getElementsByTagName('parsererror').length) return null;
+    const rootEl=xml.documentElement; if(!rootEl) return null;
+    const rt=(rootEl.localName||rootEl.tagName||'').toLowerCase();
+    const isAtom=rt==='feed', isRdf=rt==='rdf';
+    const meta={ title:'', htmlUrl:'', description:'', language:'', version:'' };
+    const titleEl=feedFirst(xml,'title');
+    const descEl=feedFirst(xml, isAtom?'subtitle':'description');
+    if(titleEl) meta.title=clean(titleEl.textContent);
+    if(descEl)  meta.description=clean(descEl.textContent);
+    if(isAtom){ meta.language=rootEl.getAttribute('xml:lang')||''; }
+    else { const l=feedFirst(xml,'language'); if(l) meta.language=clean(l.textContent); }
+    const links=xml.getElementsByTagName('link');
+    for(const l of links){
+      if(isAtom){ const rel=l.getAttribute('rel')||'alternate'; if(rel==='alternate'&&l.getAttribute('href')){ meta.htmlUrl=l.getAttribute('href'); break; } }
+      else { const t=clean(l.textContent); if(t){ meta.htmlUrl=t; break; } }
+    }
+    meta.version=isAtom?'':(isRdf?'RSS1':'RSS');
+    return meta;
+  }catch(e){ return null; }
+}
+function fetchFeedMeta(node, url, autoLabel){
+  if(typeof fetch!=='function') return;
+  fetch(url)
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+    .then(text=>{
+      const meta=parseFeedMeta(text);
+      if(!meta){ msg('Feed added (feed not readable)'); return; }
+      if(meta.title)       node.attributes.title=meta.title;
+      if(meta.htmlUrl)     node.attributes.htmlUrl=meta.htmlUrl;
+      if(meta.description) node.attributes.description=meta.description;
+      if(meta.language)    node.attributes.language=meta.language;
+      if(meta.version)     node.attributes.version=meta.version;
+      // Adopt the feed title as the headline, but only if the user hasn't
+      // edited it yet (text still equals the auto-generated label).
+      if(meta.title && node.text===autoLabel){
+        node.text=meta.title;
+        const span=document.querySelector(`.node[data-id="${node.id}"] .node-text`);
+        if(span){
+          span.textContent=meta.title;
+          if(focusedId===node.id){
+            const r=document.createRange(),s=window.getSelection();
+            r.selectNodeContents(span); r.collapse(false);
+            s.removeAllRanges(); s.addRange(r);
+          }
+        }
+      }
+      updateNodeAttrClass(node);
+      if(inspectorVisible && focusedId===node.id) renderInspector();
+      touchModified(); saveStateSoon();
+      msg('Feed: '+(meta.title||autoLabel));
+    })
+    .catch(()=>{ msg('Feed added (could not fetch metadata)'); });
+}
+function addFeed(){
+  if(readOnly) return;
+  const input=prompt('Feed URL (xmlUrl):','');
+  if(input===null) return;                    // cancelled
+  const url=input.trim();
+  if(!url){ msg('Add feed cancelled — no URL'); return; }
+  let node=getFocusedNode();
+  const reuse = node && !node.text.trim() && !node.children.length && !nodeHasAttrs(node);
+  if(!reuse){
+    const nn=makeNode('');
+    if(node){
+      const parent=findParent(root,node.id);
+      if(parent){ parent.children.splice(parent.children.indexOf(node)+1,0,nn); }
+      else getDisplayRoot().children.push(nn);
+    } else getDisplayRoot().children.push(nn);
+    node=nn;
+  }
+  node.attributes=node.attributes||{};
+  node.attributes.type='rss';
+  node.attributes.xmlUrl=url;
+  const autoLabel=feedLabelFromUrl(url);
+  if(!node.text.trim()) node.text=autoLabel;
+  touchModified();
+  render(); focusNode(node.id); openInspectorFor(node);
+  msg('Feed added — reading title…');
+  fetchFeedMeta(node, url, autoLabel);
+}
+
+// ── Add inclusion ─────────────────────────────────────────────────────────────
+// Creates a type="include" node with the required url attribute pointing to an
+// OPML file (OPML 2.0 §Inclusion). Best-effort reads the referenced file's
+// <title> to label the node; a fetch failure leaves a usable include node.
+function inclusionLabelFromUrl(url){
+  try{
+    const u=new URL(url);
+    const seg=u.pathname.split('/').filter(Boolean).pop();
+    return seg||u.hostname.replace(/^www\./,'');
+  }catch(e){ return url; }
+}
+function fetchInclusionTitle(node, url, autoLabel){
+  if(typeof fetch!=='function') return;
+  fetch(url)
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+    .then(text=>{
+      const xml=new DOMParser().parseFromString(text,'text/xml');
+      if(xml.getElementsByTagName('parsererror').length) throw new Error('not xml');
+      const t=xml.querySelector('head > title');
+      const title=t?clean(t.textContent):'';
+      if(title && node.text===autoLabel){
+        node.text=title;
+        const span=document.querySelector(`.node[data-id="${node.id}"] .node-text`);
+        if(span){
+          span.textContent=title;
+          if(focusedId===node.id){
+            const r=document.createRange(),s=window.getSelection();
+            r.selectNodeContents(span); r.collapse(false);
+            s.removeAllRanges(); s.addRange(r);
+          }
+        }
+        touchModified(); saveStateSoon(); msg('Include: '+title);
+      } else msg('Include added');
+    })
+    .catch(()=>{ msg('Include added (could not read title)'); });
+}
+function addInclusion(){
+  if(readOnly) return;
+  const input=prompt('OPML file URL to include (url):','');
+  if(input===null) return;                    // cancelled
+  const url=input.trim();
+  if(!url){ msg('Add include cancelled — no URL'); return; }
+  let node=getFocusedNode();
+  const reuse = node && !node.text.trim() && !node.children.length && !nodeHasAttrs(node);
+  if(!reuse){
+    const nn=makeNode('');
+    if(node){
+      const parent=findParent(root,node.id);
+      if(parent){ parent.children.splice(parent.children.indexOf(node)+1,0,nn); }
+      else getDisplayRoot().children.push(nn);
+    } else getDisplayRoot().children.push(nn);
+    node=nn;
+  }
+  node.attributes=node.attributes||{};
+  node.attributes.type='include';
+  node.attributes.url=url;
+  const autoLabel=inclusionLabelFromUrl(url);
+  if(!node.text.trim()) node.text=autoLabel;
+  touchModified();
+  render(); focusNode(node.id); openInspectorFor(node);
+  msg('Include added — reading title…');
+  fetchInclusionTitle(node, url, autoLabel);
+}
+
+// ── Inclusion expansion (view-only transclusion) ──────────────────────────────
+// Expanding an include node -- or a link whose url ends in .opml -- fetches the
+// referenced OPML and shows it inline, read-only. The transcluded content is
+// never written on export or saved to localStorage (see nodeToOPML/serializeNode).
+function isIncludable(node){
+  const a=node.attributes||{};
+  const t=(a.type||'').toLowerCase();
+  if(t==='include' && a.url) return true;
+  if(t==='link' && a.url && /\.opml(?:[?#]|$)/i.test(a.url)) return true;
+  return false;
+}
+function markTranscluded(node){ node.transcluded=true; node.children.forEach(markTranscluded); return node; }
+function expandInclusion(node){
+  if(node._loading) return;
+  const url=node.attributes && node.attributes.url;
+  if(!url){ msg('Nothing to include — no url'); return; }
+  if(typeof fetch!=='function'){ msg('Inclusion requires a browser with fetch'); return; }
+  node._loading=true; msg('Loading inclusion: '+url+' …');
+  fetch(url)
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+    .then(text=>{
+      const xml=new DOMParser().parseFromString(text,'text/xml');
+      if(xml.getElementsByTagName('parsererror').length) throw new Error('not valid XML');
+      const body=xml.querySelector('body');
+      if(!body) throw new Error('no <body> in included OPML');
+      const kids=Array.from(body.children).map(el=>markTranscluded(parseOPMLNode(el)));
+      node.children=kids; node.included=true; node.collapsed=false; node._loading=false;
+      render(); focusNode(node.id);
+      msg('Included '+kids.length+' node'+(kids.length===1?'':'s')+' from '+url);
+    })
+    .catch(err=>{ node._loading=false; msg('Could not include: '+err.message); });
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+let msgTimer;
+function msg(text){document.getElementById('st-msg').textContent=text;clearTimeout(msgTimer);msgTimer=setTimeout(()=>document.getElementById('st-msg').textContent='Ready',2500)}
+function countNodes(n){return n.children.reduce((a,c)=>a+1+countNodes(c),0)}
+function maxDepth(n,d=0){return n.children.length?Math.max(...n.children.map(c=>maxDepth(c,d+1))):d}
+function updateStatus(){document.getElementById('st-nodes').textContent=countNodes(root);document.getElementById('st-depth').textContent=maxDepth(root)}
+
+// ── expansionState / lastCursor / vertScrollState ────────────────────────────────────────
+// expansionState is a comma-separated list of 1-based line numbers of nodes
+// that are expanded, where line numbers count every node in flat document order.
+
+function calcExpansionState(rootNode) {
+  // Walk only visible (non-collapsed) nodes in order, matching Concord/Drummer.
+  // A node gets a line number only if its parent is expanded (or it is top-level).
+  // Expanded nodes (has children and not collapsed) are added to the list.
+  const expanded = [];
+  let lineNum = 0;
+  function walk(node) {
+    lineNum++;
+    if (node.children.length) {
+      if (!node.collapsed) {
+        expanded.push(lineNum);
+        node.children.forEach(walk); // only recurse if expanded
+      }
+      // if collapsed, children are not rendered, so not counted
+    }
+  }
+  rootNode.children.forEach(walk);
+  return expanded.join(',');
+}
+
+function applyExpansionState(rootNode, expansionStateStr) {
+  // Mirror of calcExpansionState: walk rendered nodes in order.
+  // Start with everything collapsed, then expand nodes whose number is in the set.
+  // Because expanding a node reveals its children for counting, we must process
+  // in a single pass, expanding as we go so child line numbers are correct.
+  if (!expansionStateStr || !expansionStateStr.trim()) return;
+  const expandedSet = new Set(
+    expansionStateStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+  );
+  // First collapse everything
+  function collapseAll(node) {
+    if (node.children.length) node.collapsed = true;
+    node.children.forEach(collapseAll);
+  }
+  rootNode.children.forEach(collapseAll);
+  // Now walk rendered order, expanding as we go
+  let lineNum = 0;
+  function walk(node) {
+    lineNum++;
+    if (node.children.length) {
+      if (expandedSet.has(lineNum)) {
+        node.collapsed = false;
+        node.children.forEach(walk); // now they are rendered, continue counting
+      }
+      // if not in set, stays collapsed, children not counted
+    }
+  }
+  rootNode.children.forEach(walk);
+}
+
+// lastCursor: 1-based line number of the focused node in rendered order.
+// Uses same visible-node counting as expansionState.
+function calcLastCursor(rootNode, targetId) {
+  let lineNum = 0, found = 0;
+  function walk(node) {
+    lineNum++;
+    if (node.id === targetId) found = lineNum;
+    if (!node.collapsed) node.children.forEach(walk);
+  }
+  rootNode.children.forEach(walk);
+  return found || 1;
+}
+
+// Given a 1-based lastCursor line number, return the node id at that position.
+function nodeIdAtLine(rootNode, lineNum) {
+  let count = 0, foundId = null;
+  function walk(node) {
+    count++;
+    if (count === lineNum) { foundId = node.id; return; }
+    if (!node.collapsed) node.children.forEach(walk);
+  }
+  rootNode.children.forEach(walk);
+  return foundId;
+}
+
+// vertScrollState: 1-based line number of the node nearest the top of the viewport.
+function calcVertScrollState(rootNode) {
+  const container = document.getElementById('outline-container');
+  const containerTop = container.getBoundingClientRect().top;
+  let lineNum = 0, best = 1, bestDist = Infinity;
+  function walk(node) {
+    lineNum++;
+    const el = document.querySelector(`.node[data-id="${node.id}"] .node-row`);
+    if (el) {
+      const dist = Math.abs(el.getBoundingClientRect().top - containerTop);
+      if (dist < bestDist) { bestDist = dist; best = lineNum; }
+    }
+    if (!node.collapsed) node.children.forEach(walk);
+  }
+  rootNode.children.forEach(walk);
+  return best;
+}
+
+// Scroll the viewport so the given 1-based line number is near the top.
+function applyVertScrollState(rootNode, lineNum) {
+  if (!lineNum || lineNum <= 1) return;
+  const id = nodeIdAtLine(rootNode, lineNum);
+  if (!id) return;
+  const el = document.querySelector(`.node[data-id="${id}"]`);
+  if (el) el.scrollIntoView({ block: 'start', behavior: 'instant' });
+}
+
+let readOnly = false;
+
+function setReadOnly(url) {
+  readOnly = true;
+  document.body.classList.add('readonly');
+  const link = document.getElementById('url-source-link');
+  link.textContent = url;
+  link.href = url;
+}
+
+// ── Rules ──────────────────────────────────────────────
+// Rules control how each depth level is rendered on screen -- WYSIWYG.
+// Each rule: { fontSize, fontWeight, fontFamily, fontStyle, color, lineHeight, topMargin }
+// This matches the look of this.how pages.
+const RULES = [
+  // depth 0 -- top level, bold serif
+  { fontSize:'19px', fontWeight:'700', fontFamily:"'Lora',serif",    fontStyle:'normal', color:'var(--ink)',     lineHeight:'1.45', topMargin:'10px' },
+  // depth 1
+  { fontSize:'17px', fontWeight:'400', fontFamily:"'Lora',serif",    fontStyle:'normal', color:'var(--ink)',     lineHeight:'1.55', topMargin:'2px'  },
+  // depth 2
+  { fontSize:'16px', fontWeight:'400', fontFamily:"'Lora',serif",    fontStyle:'normal', color:'var(--ink-mid)', lineHeight:'1.55', topMargin:'1px'  },
+  // depth 3
+  { fontSize:'14px', fontWeight:'400', fontFamily:"'IBM Plex Mono',monospace", fontStyle:'normal', color:'var(--ink-mid)', lineHeight:'1.5', topMargin:'0' },
+  // depth 4+ (fallback)
+  { fontSize:'13px', fontWeight:'400', fontFamily:"'IBM Plex Mono',monospace", fontStyle:'normal', color:'var(--ink-light)', lineHeight:'1.5', topMargin:'0' },
+];
+
+function getRuleForDepth(depth) {
+  return RULES[Math.min(depth, RULES.length - 1)];
+}
+
+function applyRules() {
+  // Inject a <style> block with depth-based rules derived from RULES array.
+  let css = '';
+  RULES.forEach((r, d) => {
+    const sel = d < RULES.length - 1
+      ? `.node[data-depth="${d}"]>.node-row .node-text`
+      : `.node[data-depth]>.node-row .node-text`; // catch-all for deep nodes
+    css += `${sel}{font-size:${r.fontSize};font-weight:${r.fontWeight};font-family:${r.fontFamily};font-style:${r.fontStyle};color:${r.color};line-height:${r.lineHeight};}\n`;
+    if (r.topMargin && r.topMargin !== '0') {
+      css += `.node[data-depth="${d}"]>.node-row{margin-top:${r.topMargin};}\n`;
+    }
+  });
+  let styleEl = document.getElementById('rules-style');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'rules-style';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = css;
+}
+
+// ── Hit counter ─────────────────────────────────────────
+function readHttpFile(url, callback) {
+  fetch(url).then(r => r.text()).then(callback).catch(() => {});
+}
+function hitCounter(counterGroup, counterServer, thisPageUrl, referrer) {
+  var defaultCounterGroup = "scripting";
+  var defaultCounterServer = "//counters.scripting.com/hello";
+  if (counterGroup === undefined) counterGroup = defaultCounterGroup;
+  if (counterServer === undefined) counterServer = defaultCounterServer;
+  if (thisPageUrl === undefined) {
+    thisPageUrl = location.href;
+    if (thisPageUrl === undefined) thisPageUrl = "";
+  }
+  if (thisPageUrl.endsWith("#")) thisPageUrl = thisPageUrl.slice(0, -1);
+  if (referrer === undefined) referrer = document.referrer;
+  var url = counterServer + "?group=" + encodeURIComponent(counterGroup) + "&referer=" + encodeURIComponent(referrer) + "&url=" + encodeURIComponent(thisPageUrl);
+  readHttpFile(url, function(msg) { console.log("hitCounter: msgFromServer == " + msg); });
+}
+
+// ── localStorage persistence ──────────────────────────────
+const STORAGE_KEY = 'outliner_state';
+let saveTimer = null;
+
+function saveState() {
+  if (readOnly) return; // never overwrite saved state with a read-only URL view
+  try {
+    const state = {
+      title:          document.getElementById('doc-title').value,
+      meta:           { ...meta },
+      root:           serializeNode(root),
+      expansionState: calcExpansionState(root),
+      lastCursor:     focusedId ? calcLastCursor(root, focusedId) : 1,
+      vertScrollState: calcVertScrollState(root),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch(e) { console.log('saveState error:', e); }
+}
+
+function saveStateSoon() {
+  // Debounce -- save 1s after last change
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveState, 1000);
+}
+
+function serializeNode(node) {
+  return {
+    id:         node.id,
+    text:       node.text,
+    collapsed:  node.collapsed,
+    attributes: { ...(node.attributes || {}) },
+    // Included content is transient -- persist the reference only, not the view.
+    children:   node.included ? [] : node.children.map(serializeNode),
+  };
+}
+
+function deserializeNode(obj) {
+  // Restore node, reusing saved ids so expansionState lines up
+  const node = { id: obj.id, text: obj.text || '', collapsed: obj.collapsed || false, attributes: { ...(obj.attributes || {}) }, children: [] };
+  if (obj.id >= idCounter) idCounter = obj.id + 1;
+  node.children = (obj.children || []).map(deserializeNode);
+  return node;
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const state = JSON.parse(raw);
+    document.getElementById('doc-title').value = state.title || 'Untitled';
+    if (state.meta) {
+      meta.dateCreated  = state.meta.dateCreated  || meta.dateCreated;
+      meta.dateModified = state.meta.dateModified || meta.dateModified;
+      meta.ownerName    = state.meta.ownerName    || '';
+      meta.ownerEmail   = state.meta.ownerEmail   || '';
+      refreshMetaUI();
+    }
+    idCounter = 0;
+    root = { id: 0, text: '__root__', children: (state.root.children || []).map(deserializeNode), collapsed: false };
+    applyExpansionState(root, state.expansionState || '');
+    // lastCursor and vertScrollState are applied after render() in init
+    return { lastCursor: state.lastCursor || 1, vertScrollState: state.vertScrollState || 1 };
+  } catch(e) {
+    console.log('loadState error:', e);
+    return false;
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+buildDocsPanel();
+refreshMetaUI();
+applyRules();
+hitCounter();
+
+const urlParam = new URLSearchParams(window.location.search).get('url');
+if (urlParam) {
+  setReadOnly(urlParam);
+  msg('Loading\u2026');
+  fetch(urlParam)
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(text => {
+      const xml = new DOMParser().parseFromString(text, 'text/xml');
+      const get = tag => { const el = xml.querySelector(`head > ${tag}`); return el ? el.textContent : ''; };
+      document.getElementById('doc-title').value = get('title') || urlParam.split('/').pop();
+      meta.dateCreated  = get('dateCreated')  || '';
+      meta.dateModified = get('dateModified') || '';
+      meta.ownerName    = get('ownerName')    || '';
+      meta.ownerEmail   = get('ownerEmail')   || '';
+      refreshMetaUI();
+      const body = xml.querySelector('body');
+      if (!body) throw new Error('No body element');
+      idCounter = 0;
+      root = { id:0, text:'__root__', children: Array.from(body.children).map(el => parseOPMLNode(el)), collapsed: false };
+      hoistStack = [];
+      applyExpansionState(root, get('expansionState'));
+      render();
+      setTimeout(() => {
+        const vs = parseInt(get('vertScrollState')) || 1;
+        const lc = parseInt(get('lastCursor')) || 1;
+        applyVertScrollState(root, vs);
+        const cursorId = nodeIdAtLine(root, lc);
+        if (cursorId) focusNode(cursorId);
+        else if (root.children.length) focusNode(root.children[0].id);
+      }, 50);
+      msg('Loaded: ' + urlParam.split('/').pop());
+    })
+    .catch(err => msg('Failed to load: ' + err.message));
+} else {
+  const restored = loadState();
+  if (!restored) {
+    root.children = [makeNode('')];
+    render();
+    setTimeout(() => { if (root.children.length) focusNode(root.children[0].id); }, 50);
+  } else {
+    render();
+    setTimeout(() => {
+      // Restore scroll position first, then cursor
+      applyVertScrollState(root, restored.vertScrollState);
+      const cursorId = nodeIdAtLine(root, restored.lastCursor);
+      if (cursorId) focusNode(cursorId);
+      else if (root.children.length) focusNode(root.children[0].id);
+    }, 50);
+  }
+}
+</script>
+</body>
+</html>

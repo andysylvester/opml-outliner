@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Outliner</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f5f0e8;--paper:#faf7f2;--ink:#1a1612;--ink-mid:#4a4540;--ink-light:#9a9590;--accent:#c0392b;--accent-soft:#f0e0de;--indent:22px;--line-h:30px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:'Source Sans 3',sans-serif;color:var(--ink);min-height:100vh;display:flex;flex-direction:column}
+header{padding:22px 48px 16px;border-bottom:2px solid var(--ink);display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+header h1{font-family:'Lora',serif;font-size:26px;font-weight:700;letter-spacing:-.5px}
+#version-badge{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-light);align-self:center}
+#doc-title{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink-mid);background:transparent;border:none;outline:none;border-bottom:1px dashed var(--ink-light);padding:2px 6px;min-width:200px}
+#doc-title:focus{border-bottom-color:var(--accent)}
+.toolbar{padding:10px 48px;border-bottom:1px solid var(--ink-light);display:flex;gap:6px;align-items:center;background:var(--paper);flex-wrap:wrap}
+.toolbar button{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 10px;border:1px solid var(--ink-light);background:transparent;color:var(--ink-mid);cursor:pointer;border-radius:2px;transition:all .1s;white-space:nowrap}
+.toolbar button:hover{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.toolbar button.docs-btn{border-color:var(--accent);color:var(--accent)}
+.toolbar button.docs-btn:hover,.toolbar button.docs-btn.active{background:var(--accent);color:white;border-color:var(--accent)}
+.toolbar-sep{width:1px;height:18px;background:var(--ink-light);margin:0 4px}
+.hint{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-light)}
+#outline-container{flex:1;padding:32px 48px 80px;max-width:900px}
+.node{position:relative;line-height:var(--line-h)}
+.node-row{display:flex;align-items:flex-start;min-height:var(--line-h);border-radius:3px;transition:background .08s}
+.node-row:hover{background:rgba(0,0,0,.03)}
+.node-row.focused{background:var(--accent-soft)}
+.bullet-wrap{width:26px;min-width:26px;height:var(--line-h);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;position:relative}
+.bullet{width:7px;height:7px;border-radius:50%;background:var(--ink-light);transition:background .15s,transform .15s}
+.bullet-wrap:hover .bullet{background:var(--accent);transform:scale(1.3)}
+.node.has-children>.node-row .bullet{background:var(--ink);border-radius:2px}
+.node.collapsed>.node-row .bullet{background:var(--accent);border-radius:50%}
+.node.has-children>.node-row .bullet-wrap::after{content:'';position:absolute;right:1px;top:50%;transform:translateY(-50%);border-left:4px solid var(--ink-light);border-top:3px solid transparent;border-bottom:3px solid transparent;transition:transform .15s}
+.node.has-children:not(.collapsed)>.node-row .bullet-wrap::after{transform:translateY(-50%) rotate(90deg)}
+.node-text{flex:1;min-height:var(--line-h);padding:3px 6px 3px 2px;font-family:'Lora',serif;font-size:17px;font-weight:400;color:var(--ink);line-height:1.55;outline:none;white-space:pre-wrap;word-break:break-word;caret-color:var(--accent)}
+.node-text:empty::before{content:attr(data-placeholder);color:var(--ink-light);font-style:italic;pointer-events:none}
+/* Depth styles are injected by applyRules() from the RULES object */
+.children{padding-left:var(--indent);border-left:1px solid rgba(0,0,0,.08);margin-left:12px}
+.node.collapsed>.children{display:none}
+body.hoisted #hoist-bar{display:flex}
+#hoist-bar{display:none;padding:8px 48px;background:var(--ink);color:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:12px;align-items:center;gap:12px}
+#hoist-bar button{background:var(--accent);color:white;border:none;padding:3px 10px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px;border-radius:2px}
+#status{position:fixed;bottom:0;left:0;right:0;background:var(--ink);color:var(--ink-light);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 48px;display:flex;gap:24px}
+#status span{color:var(--paper)}
+.node-row.drag-over-above{border-top:2px solid var(--accent)}
+.node-row.drag-over-below{border-bottom:2px solid var(--accent)}
+.node.dragging{opacity:.35}
+
+/* Read-only mode */
+body.readonly #doc-info{display:none}
+body.readonly .toolbar button:not(.docs-btn):not(#readonly-badge){opacity:.35;pointer-events:none}
+#readonly-badge{display:none;border-color:#5a8a5a;color:#5a8a5a;pointer-events:none}
+body.readonly #readonly-badge{display:inline-block}
+body.readonly #doc-title{pointer-events:none}
+#url-source{display:none;padding:5px 48px;background:#eef4ee;border-bottom:1px solid #bbd4bb;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#3a6a3a}
+#url-source a{color:#3a6a3a;text-decoration:underline}
+body.readonly #url-source{display:block}
+
+/* Doc info bar */
+#doc-info{padding:6px 48px;background:var(--paper);border-bottom:1px solid var(--ink-light);display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.doc-field{display:flex;align-items:center;gap:6px}
+.doc-field label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-light);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.doc-field input{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-mid);background:transparent;border:none;outline:none;border-bottom:1px dashed transparent;padding:1px 4px;min-width:120px;transition:border-color .1s}
+.doc-field input:focus{border-bottom-color:var(--accent)}
+.doc-field input[readonly]{color:var(--ink-light);min-width:160px;cursor:default}
+
+/* Docs panel */
+#docs-panel{position:fixed;top:108px;right:24px;width:320px;max-height:calc(100vh - 140px);background:var(--paper);border:2px solid var(--ink);box-shadow:5px 5px 0 var(--ink);display:flex;flex-direction:column;z-index:100}
+#docs-panel.hidden{display:none}
+#docs-panel-header{padding:8px 12px;background:var(--ink);color:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:11px;display:flex;align-items:center;justify-content:space-between;cursor:move;user-select:none;letter-spacing:.05em}
+#docs-panel-header button{background:none;border:none;color:var(--paper);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;opacity:.7}
+#docs-panel-header button:hover{opacity:1}
+#docs-panel-body{overflow-y:auto;padding:12px 14px;flex:1;font-size:13px}
+.docs-node{padding:1px 0}
+.docs-row{display:flex;align-items:flex-start;gap:6px;padding:1px 0;line-height:1.5}
+.docs-tri{flex-shrink:0;width:10px;margin-top:5px;cursor:pointer}
+.docs-tri svg{display:block;transition:transform .15s}
+.docs-tri.open svg{transform:rotate(90deg)}
+.docs-dot{flex-shrink:0;width:10px;display:flex;align-items:center;justify-content:center;margin-top:8px}
+.docs-dot span{display:block;width:4px;height:4px;border-radius:50%;background:var(--ink-light)}
+.docs-text{color:var(--ink);line-height:1.5}
+.docs-depth-0>.docs-row>.docs-text{font-weight:500;font-size:13px}
+.docs-depth-1>.docs-row>.docs-text{font-size:12px}
+.docs-depth-2>.docs-row>.docs-text{font-size:12px;color:var(--ink-mid)}
+.docs-children{padding-left:14px;border-left:1px solid rgba(0,0,0,.07);margin-left:4px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Outliner</h1>
+  <input id="doc-title" type="text" value="Untitled" placeholder="Document title" spellcheck="false">
+  <span id="version-badge">v0.4.9</span>
+</header>
+
+<div id="doc-info">
+  <div class="doc-field">
+    <label>Owner</label>
+    <input id="meta-owner-name" type="text" placeholder="Your name" spellcheck="false">
+  </div>
+  <div class="doc-field">
+    <label>Email</label>
+    <input id="meta-owner-email" type="text" placeholder="your@email.com" spellcheck="false">
+  </div>
+  <div class="doc-field">
+    <label>Created</label>
+    <input id="meta-date-created" type="text" readonly tabindex="-1">
+  </div>
+  <div class="doc-field">
+    <label>Modified</label>
+    <input id="meta-date-modified" type="text" readonly tabindex="-1">
+  </div>
+</div>
+
+<div id="hoist-bar">
+  <span>Hoisted into: <strong id="hoist-label"></strong></span>
+  <button onclick="dehoist()">&#8593; Dehoist</button>
+</div>
+
+<div class="toolbar">
+  <button onclick="indentSelected()">&#8594; Indent</button>
+  <button onclick="outdentSelected()">&#8592; Outdent</button>
+  <div class="toolbar-sep"></div>
+  <button onclick="moveUp()">&#8593; Move Up</button>
+  <button onclick="moveDown()">&#8595; Move Down</button>
+  <div class="toolbar-sep"></div>
+  <button onclick="collapseAll()">Collapse All</button>
+  <button onclick="expandAll()">Expand All</button>
+  <div class="toolbar-sep"></div>
+  <button onclick="hoistSelected()">Hoist</button>
+  <div class="toolbar-sep"></div>
+  <button onclick="exportOPML()">Export OPML</button>
+  <button onclick="importOPML()">Import OPML</button>
+  <input type="file" id="opml-file" accept=".opml,.xml" style="display:none" onchange="handleOPMLFile(event)">
+  <div class="toolbar-sep"></div>
+  <button class="docs-btn active" id="docs-toggle-btn" onclick="toggleDocs()">? Docs</button>
+  <button id="readonly-badge">&#128274; Read-only</button>
+  <div class="hint">Tab/Shift-Tab &middot; Alt-&#8597; move &middot; Alt-click bullet to hoist</div>
+</div>
+
+<div id="url-source">Viewing: <a id="url-source-link" href="" target="_blank"></a></div>
+
+<div id="outline-container"></div>
+
+<div id="docs-panel">
+  <div id="docs-panel-header">
+    <span>DOCS</span>
+    <button onclick="toggleDocs()" title="Close">&#215;</button>
+  </div>
+  <div id="docs-panel-body"></div>
+</div>
+
+<div id="status">Nodes: <span id="st-nodes">0</span> &nbsp;&middot;&nbsp; Max depth: <span id="st-depth">0</span> &nbsp;&middot;&nbsp; <span id="st-msg">Ready</span></div>
+
+<script>
+// ── Embedded docs ─────────────────────────────────────────────────────────────
+const DOCS = [
+  { text: "Getting started", children: [
+    { text: "Click any node to edit it" },
+    { text: "Enter creates a new sibling below" },
+    { text: "Backspace on an empty node deletes it" },
+  ]},
+  { text: "Keyboard shortcuts", children: [
+    { text: "Enter \u2014 new sibling below" },
+    { text: "Tab \u2014 indent node" },
+    { text: "Shift-Tab \u2014 outdent node" },
+    { text: "Alt-\u2191 / Alt-\u2193 \u2014 move node up / down" },
+    { text: "Arrow keys \u2014 navigate" },
+    { text: "Backspace on empty \u2014 delete" },
+  ]},
+  { text: "Mouse", children: [
+    { text: "Click bullet \u2014 collapse / expand" },
+    { text: "Alt-click bullet \u2014 hoist into node" },
+    { text: "Drag rows to reorder" },
+  ]},
+  { text: "Hoist", children: [
+    { text: "Focuses the view into one subtree" },
+    { text: "Alt-click any bullet, or select a node and click Hoist" },
+    { text: "Click \u2191 Dehoist in the bar to return" },
+    { text: "Hoist stacks: you can hoist inside a hoist" },
+  ]},
+  { text: "Files", children: [
+    { text: "Export OPML \u2014 saves your outline as an OPML file" },
+    { text: "Head fields included: title, ownerName, ownerEmail, dateCreated, dateModified, expansionState" },
+    { text: "expansionState records which nodes are expanded so the outline opens exactly as you left it" },
+    { text: "Import OPML \u2014 loads an OPML file, restoring all head fields including expansionState" },
+    { text: "Compatible with files from Drummer and Frontier" },
+  ]},
+  { text: "URL viewer mode", children: [
+    { text: "Add ?url= to the address to open any public OPML file in read-only mode" },
+    { text: "Example: outliner.html?url=https://example.com/outline.opml" },
+    { text: "The outline is fully navigable: collapse, expand, hoist all work" },
+    { text: "Editing is disabled \u2014 a lock badge appears in the toolbar" },
+    { text: "The source URL is shown in a bar below the toolbar" },
+    { text: "Export OPML still works \u2014 you can save a local copy" },
+  ]},
+];
+
+// ── Metadata ──────────────────────────────────────────────────────────────────
+let meta = {
+  dateCreated: new Date().toUTCString(),
+  dateModified: new Date().toUTCString(),
+  ownerName: '',
+  ownerEmail: '',
+};
+
+function refreshMetaUI() {
+  document.getElementById('meta-owner-name').value  = meta.ownerName;
+  document.getElementById('meta-owner-email').value = meta.ownerEmail;
+  document.getElementById('meta-date-created').value  = fmtDate(meta.dateCreated);
+  document.getElementById('meta-date-modified').value = fmtDate(meta.dateModified);
+}
+
+function fmtDate(s) {
+  if (!s) return '';
+  try { return new Date(s).toLocaleString(); } catch(e) { return s; }
+}
+
+function touchModified() {
+  meta.dateModified = new Date().toUTCString();
+  document.getElementById('meta-date-modified').value = fmtDate(meta.dateModified);
+}
+
+document.getElementById('meta-owner-name').addEventListener('input',  e => { meta.ownerName  = e.target.value; touchModified(); saveStateSoon(); });
+document.getElementById('meta-owner-email').addEventListener('input', e => { meta.ownerEmail = e.target.value; touchModified(); saveStateSoon(); });
+document.getElementById('doc-title').addEventListener('input', () => saveStateSoon());
+
+// ── Docs panel ────────────────────────────────────────────────────────────────
+let docsVisible = true;
+
+function renderDocsNode(n, depth) {
+  const wrap = document.createElement('div');
+  wrap.className = `docs-node docs-depth-${depth}`;
+  const row = document.createElement('div');
+  row.className = 'docs-row';
+  if (n.children && n.children.length) {
+    const tri = document.createElement('div');
+    tri.className = 'docs-tri open';
+    tri.innerHTML = '<svg width="8" height="8" viewBox="0 0 8 8"><polygon points="1,1 7,4 1,7" fill="var(--ink)"/></svg>';
+    tri.dataset.open = 'true';
+    row.appendChild(tri);
+    const txt = document.createElement('span');
+    txt.className = 'docs-text'; txt.textContent = n.text;
+    row.appendChild(txt);
+    wrap.appendChild(row);
+    const ch = document.createElement('div');
+    ch.className = 'docs-children';
+    n.children.forEach(c => ch.appendChild(renderDocsNode(c, depth + 1)));
+    wrap.appendChild(ch);
+    tri.addEventListener('click', () => {
+      const open = tri.classList.toggle('open');
+      ch.style.display = open ? '' : 'none';
+    });
+  } else {
+    const dot = document.createElement('div');
+    dot.className = 'docs-dot';
+    dot.innerHTML = '<span></span>';
+    row.appendChild(dot);
+    const txt = document.createElement('span');
+    txt.className = 'docs-text'; txt.textContent = n.text;
+    row.appendChild(txt);
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function buildDocsPanel() {
+  const body = document.getElementById('docs-panel-body');
+  body.innerHTML = '';
+  DOCS.forEach(n => body.appendChild(renderDocsNode(n, 0)));
+}
+
+function toggleDocs() {
+  docsVisible = !docsVisible;
+  document.getElementById('docs-panel').classList.toggle('hidden', !docsVisible);
+  document.getElementById('docs-toggle-btn').classList.toggle('active', docsVisible);
+}
+
+(function() {
+  const panel = document.getElementById('docs-panel');
+  const hdr   = document.getElementById('docs-panel-header');
+  let ox=0,oy=0,dragging=false;
+  hdr.addEventListener('mousedown', e => {
+    if (e.target.tagName === 'BUTTON') return;
+    dragging=true; panel.style.right='auto';
+    ox=e.clientX-panel.offsetLeft; oy=e.clientY-panel.offsetTop;
+  });
+  document.addEventListener('mousemove', e => { if(dragging){panel.style.left=(e.clientX-ox)+'px';panel.style.top=(e.clientY-oy)+'px';} });
+  document.addEventListener('mouseup', () => { dragging=false; });
+})();
+
+// ── Outliner model ────────────────────────────────────────────────────────────
+let idCounter=0;
+const newId=()=>++idCounter;
+function makeNode(text='',children=[]){return{id:newId(),text,children,collapsed:false}}
+let root={id:0,text:'__root__',children:[],collapsed:false};
+let hoistStack=[],focusedId=null;
+function getDisplayRoot(){return hoistStack.length?hoistStack[hoistStack.length-1].node:root}
+
+function render(){
+  const c=document.getElementById('outline-container'),dr=getDisplayRoot();
+  c.innerHTML='';
+  dr.children.forEach(n=>c.appendChild(renderNode(n,0)));
+  updateStatus();
+  saveStateSoon();
+}
+function renderNode(node,depth){
+  const div=document.createElement('div');
+  div.className='node'+(node.children.length?' has-children':'')+(node.collapsed?' collapsed':'');
+  div.dataset.id=node.id; div.dataset.depth=depth;
+  const row=document.createElement('div');
+  row.className='node-row'+(node.id===focusedId?' focused':'');
+  const bw=document.createElement('div'); bw.className='bullet-wrap';
+  bw.title='Click: collapse/expand  Alt-click: hoist';
+  const bullet=document.createElement('div'); bullet.className='bullet';
+  bw.appendChild(bullet);
+  bw.addEventListener('click',e=>{
+    if(e.altKey){hoistNode(node);return}
+    if(node.children.length){node.collapsed=!node.collapsed;render()}
+  });
+  const span=document.createElement('div');
+  span.className='node-text'; span.contentEditable= readOnly ? 'false' : 'true'; span.spellcheck=true;
+  span.dataset.placeholder=depth===0?'Start typing\u2026':'\u2026';
+  span.textContent=node.text;
+  span.addEventListener('focus',()=>{focusedId=node.id;updateFocusHighlight()});
+  span.addEventListener('blur',()=>{node.text=span.textContent;touchModified();updateStatus()});
+  span.addEventListener('input',()=>{node.text=span.textContent;saveStateSoon()});
+  span.addEventListener('keydown',e=>{
+    if(readOnly){
+      // allow navigation only
+      if(!e.altKey&&e.key==='ArrowUp'){const p=getPrevVisible(node);if(p){e.preventDefault();focusNode(p.id)}}
+      if(!e.altKey&&e.key==='ArrowDown'){const n2=getNextVisible(node);if(n2){e.preventDefault();focusNode(n2.id)}}
+      e.preventDefault(); return;
+    }
+    if(e.key==='Enter'&&!e.shiftKey){
+      e.preventDefault(); node.text=span.textContent;
+      const parent=findParent(root,node.id); if(!parent)return;
+      const idx=parent.children.indexOf(node),nn=makeNode();
+      parent.children.splice(idx+1,0,nn); render(); focusNode(nn.id);
+    }
+    if(e.key==='Tab'){e.preventDefault();e.shiftKey?outdentNode(node):indentNode(node)}
+    if(e.key==='Backspace'&&span.textContent===''){e.preventDefault();deleteNode(node)}
+    if(e.altKey&&e.key==='ArrowUp'){e.preventDefault();moveNodeUp(node)}
+    if(e.altKey&&e.key==='ArrowDown'){e.preventDefault();moveNodeDown(node)}
+    if(!e.altKey&&e.key==='ArrowUp'){const p=getPrevVisible(node);if(p){e.preventDefault();focusNode(p.id)}}
+    if(!e.altKey&&e.key==='ArrowDown'){const n2=getNextVisible(node);if(n2){e.preventDefault();focusNode(n2.id)}}
+    // Cmd-U/D/L/R -- classic outliner shortcuts (also Ctrl on Windows/Linux)
+    const cmdKey = e.metaKey || e.ctrlKey;
+    if(cmdKey&&e.key==='u'){e.preventDefault();moveNodeUp(node)}
+    if(cmdKey&&e.key==='d'){e.preventDefault();moveNodeDown(node)}
+    if(cmdKey&&e.key==='l'){e.preventDefault();outdentNode(node)}
+    if(cmdKey&&e.key==='r'){e.preventDefault();indentNode(node)}
+  });
+  row.draggable=true;
+  row.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',node.id);setTimeout(()=>div.classList.add('dragging'),0)});
+  row.addEventListener('dragend',()=>div.classList.remove('dragging'));
+  row.addEventListener('dragover',e=>{
+    e.preventDefault();
+    const mid=row.getBoundingClientRect().top+row.getBoundingClientRect().height/2;
+    row.classList.remove('drag-over-above','drag-over-below');
+    row.classList.add(e.clientY<mid?'drag-over-above':'drag-over-below');
+  });
+  row.addEventListener('dragleave',()=>row.classList.remove('drag-over-above','drag-over-below'));
+  row.addEventListener('drop',e=>{
+    e.preventDefault();
+    const dragId=parseInt(e.dataTransfer.getData('text/plain')),dragNode=findNode(root,dragId);
+    const above=e.clientY<row.getBoundingClientRect().top+row.getBoundingClientRect().height/2;
+    if(dragNode&&dragNode.id!==node.id){
+      removeNode(root,dragId);
+      const parent=findParent(root,node.id);
+      if(parent){const idx=parent.children.indexOf(node);parent.children.splice(above?idx:idx+1,0,dragNode)}
+      render(); focusNode(dragNode.id);
+    }
+    row.classList.remove('drag-over-above','drag-over-below');
+  });
+  row.appendChild(bw); row.appendChild(span); div.appendChild(row);
+  if(node.children.length){
+    const ch=document.createElement('div'); ch.className='children';
+    node.children.forEach(c=>ch.appendChild(renderNode(c,depth+1)));
+    div.appendChild(ch);
+  }
+  return div;
+}
+function updateFocusHighlight(){
+  document.querySelectorAll('.node-row').forEach(r=>{
+    const id=parseInt(r.closest('.node').dataset.id);
+    r.classList.toggle('focused',id===focusedId);
+  });
+}
+function findNode(node,id){
+  if(node.id===id)return node;
+  for(const c of node.children){const f=findNode(c,id);if(f)return f}
+  return null;
+}
+function findParent(node,id){
+  for(const c of node.children){
+    if(c.id===id)return node;
+    const f=findParent(c,id); if(f)return f;
+  }
+  return null;
+}
+function removeNode(node,id){
+  const idx=node.children.findIndex(c=>c.id===id);
+  if(idx!==-1){node.children.splice(idx,1);return true}
+  return node.children.some(c=>removeNode(c,id));
+}
+function flatVisible(dr){
+  const list=[];
+  function walk(n){list.push(n);if(!n.collapsed)n.children.forEach(walk)}
+  dr.children.forEach(walk); return list;
+}
+function getPrevVisible(node){const flat=flatVisible(getDisplayRoot()),i=flat.findIndex(n=>n.id===node.id);return i>0?flat[i-1]:null}
+function getNextVisible(node){const flat=flatVisible(getDisplayRoot()),i=flat.findIndex(n=>n.id===node.id);return i<flat.length-1?flat[i+1]:null}
+function focusNode(id){
+  focusedId=id; render();
+  const el=document.querySelector(`.node[data-id="${id}"] .node-text`);
+  if(el){el.focus();const r=document.createRange(),s=window.getSelection();r.selectNodeContents(el);r.collapse(false);s.removeAllRanges();s.addRange(r)}
+}
+function getFocusedNode(){return focusedId?findNode(root,focusedId):null}
+function indentNode(node){
+  const parent=findParent(root,node.id); if(!parent)return;
+  const idx=parent.children.indexOf(node); if(idx===0)return;
+  const prev=parent.children[idx-1]; removeNode(root,node.id);
+  prev.collapsed=false; prev.children.push(node); render(); focusNode(node.id); msg('Indented');
+}
+function outdentNode(node){
+  const parent=findParent(root,node.id);
+  if(!parent||parent.id===0)return;
+  const gp=findParent(root,parent.id); if(!gp)return;
+  const pi=gp.children.indexOf(parent); removeNode(root,node.id);
+  gp.children.splice(pi+1,0,node); render(); focusNode(node.id); msg('Outdented');
+}
+function deleteNode(node){
+  const prev=getPrevVisible(node); removeNode(root,node.id); render();
+  if(prev)focusNode(prev.id); touchModified(); msg('Node deleted');
+}
+function moveNodeUp(node){
+  const parent=findParent(root,node.id); if(!parent)return;
+  const i=parent.children.indexOf(node); if(i===0)return;
+  parent.children.splice(i,1); parent.children.splice(i-1,0,node);
+  render(); focusNode(node.id); touchModified(); msg('Moved up');
+}
+function moveNodeDown(node){
+  const parent=findParent(root,node.id); if(!parent)return;
+  const i=parent.children.indexOf(node); if(i===parent.children.length-1)return;
+  parent.children.splice(i,1); parent.children.splice(i+1,0,node);
+  render(); focusNode(node.id); touchModified(); msg('Moved down');
+}
+function indentSelected(){const n=getFocusedNode();if(n)indentNode(n)}
+function outdentSelected(){const n=getFocusedNode();if(n)outdentNode(n)}
+function moveUp(){const n=getFocusedNode();if(n)moveNodeUp(n)}
+function moveDown(){const n=getFocusedNode();if(n)moveNodeDown(n)}
+function collapseAll(){
+  function walk(n){if(n.children.length){n.collapsed=true;n.children.forEach(walk)}}
+  getDisplayRoot().children.forEach(walk); render(); msg('Collapsed all');
+}
+function expandAll(){
+  function walk(n){n.collapsed=false;n.children.forEach(walk)}
+  getDisplayRoot().children.forEach(walk); render(); msg('Expanded all');
+}
+function hoistNode(node){
+  hoistStack.push({node}); document.body.classList.add('hoisted');
+  document.getElementById('hoist-label').textContent=node.text||'(untitled)';
+  render(); if(node.children.length)focusNode(node.children[0].id);
+  msg('Hoisted: '+(node.text||'(untitled)'));
+}
+function hoistSelected(){const n=getFocusedNode();if(n)hoistNode(n)}
+function dehoist(){
+  if(!hoistStack.length)return;
+  const{node}=hoistStack.pop();
+  if(!hoistStack.length)document.body.classList.remove('hoisted');
+  else document.getElementById('hoist-label').textContent=hoistStack[hoistStack.length-1].node.text;
+  render(); focusNode(node.id); msg('Dehoisted');
+}
+
+// ── OPML ──────────────────────────────────────────────────────────────────────
+function esc(s){return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function nodeToOPML(node,indent){
+  const pad=' '.repeat(indent);
+  if(!node.children.length)return`${pad}<outline text="${esc(node.text)}"/>`;
+  const kids=node.children.map(c=>nodeToOPML(c,indent+2)).join('\n');
+  return`${pad}<outline text="${esc(node.text)}">\n${kids}\n${pad}</outline>`;
+}
+function exportOPML(){
+  touchModified();
+  const title=document.getElementById('doc-title').value||'Untitled';
+  const expansionState = calcExpansionState(root);
+  const lastCursorVal = focusedId ? calcLastCursor(root, focusedId) : 1;
+  const vertScrollVal = calcVertScrollState(root);
+  const headFields = [
+    `    <title>${esc(title)}</title>`,
+    meta.dateCreated  ? `    <dateCreated>${esc(meta.dateCreated)}</dateCreated>`   : '',
+    meta.dateModified ? `    <dateModified>${esc(meta.dateModified)}</dateModified>` : '',
+    meta.ownerName    ? `    <ownerName>${esc(meta.ownerName)}</ownerName>`          : '',
+    meta.ownerEmail   ? `    <ownerEmail>${esc(meta.ownerEmail)}</ownerEmail>`       : '',
+    expansionState    ? `    <expansionState>${esc(expansionState)}</expansionState>` : '',
+    `    <lastCursor>${lastCursorVal}</lastCursor>`,
+    `    <vertScrollState>${vertScrollVal}</vertScrollState>`,
+  ].filter(Boolean).join('\n');
+  const body=root.children.map(c=>nodeToOPML(c,4)).join('\n');
+  const opml=`<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n${headFields}\n  </head>\n  <body>\n${body}\n  </body>\n</opml>`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([opml],{type:'text/xml'}));
+  a.download=(title.replace(/\s+/g,'_')||'outline')+'.opml';
+  a.click(); msg('Exported OPML');
+}
+function importOPML(){document.getElementById('opml-file').click()}
+function handleOPMLFile(e){
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const xml=new DOMParser().parseFromString(ev.target.result,'text/xml');
+      const get=tag=>{const el=xml.querySelector(`head > ${tag}`);return el?el.textContent:''};
+      document.getElementById('doc-title').value = get('title') || 'Untitled';
+      meta.dateCreated  = get('dateCreated')  || new Date().toUTCString();
+      meta.dateModified = get('dateModified') || new Date().toUTCString();
+      meta.ownerName    = get('ownerName')    || '';
+      meta.ownerEmail   = get('ownerEmail')   || '';
+      refreshMetaUI();
+      const body=xml.querySelector('body');
+      if(!body)throw new Error('No body element');
+      idCounter=0;
+      root={id:0,text:'__root__',children:Array.from(body.children).map(el=>parseOPMLNode(el)),collapsed:false};
+      hoistStack=[]; document.body.classList.remove('hoisted');
+      applyExpansionState(root, get('expansionState'));
+      render();
+      setTimeout(() => {
+        const vs = parseInt(get('vertScrollState')) || 1;
+        const lc = parseInt(get('lastCursor')) || 1;
+        applyVertScrollState(root, vs);
+        const cursorId = nodeIdAtLine(root, lc);
+        if (cursorId) focusNode(cursorId);
+        else if (root.children.length) focusNode(root.children[0].id);
+      }, 50);
+      msg('Opened: '+file.name);
+    }catch(err){msg('Error: '+err.message)}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+function parseOPMLNode(el){
+  const node=makeNode(el.getAttribute('text')||'');
+  Array.from(el.children).forEach(c=>node.children.push(parseOPMLNode(c)));
+  return node;
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+let msgTimer;
+function msg(text){document.getElementById('st-msg').textContent=text;clearTimeout(msgTimer);msgTimer=setTimeout(()=>document.getElementById('st-msg').textContent='Ready',2500)}
+function countNodes(n){return n.children.reduce((a,c)=>a+1+countNodes(c),0)}
+function maxDepth(n,d=0){return n.children.length?Math.max(...n.children.map(c=>maxDepth(c,d+1))):d}
+function updateStatus(){document.getElementById('st-nodes').textContent=countNodes(root);document.getElementById('st-depth').textContent=maxDepth(root)}
+
+// ── expansionState / lastCursor / vertScrollState ────────────────────────────────────────
+// expansionState is a comma-separated list of 1-based line numbers of nodes
+// that are expanded, where line numbers count every node in flat document order.
+
+function calcExpansionState(rootNode) {
+  // Walk only visible (non-collapsed) nodes in order, matching Concord/Drummer.
+  // A node gets a line number only if its parent is expanded (or it is top-level).
+  // Expanded nodes (has children and not collapsed) are added to the list.
+  const expanded = [];
+  let lineNum = 0;
+  function walk(node) {
+    lineNum++;
+    if (node.children.length) {
+      if (!node.collapsed) {
+        expanded.push(lineNum);
+        node.children.forEach(walk); // only recurse if expanded
+      }
+      // if collapsed, children are not rendered, so not counted
+    }
+  }
+  rootNode.children.forEach(walk);
+  return expanded.join(',');
+}
+
+function applyExpansionState(rootNode, expansionStateStr) {
+  // Mirror of calcExpansionState: walk rendered nodes in order.
+  // Start with everything collapsed, then expand nodes whose number is in the set.
+  // Because expanding a node reveals its children for counting, we must process
+  // in a single pass, expanding as we go so child line numbers are correct.
+  if (!expansionStateStr || !expansionStateStr.trim()) return;
+  const expandedSet = new Set(
+    expansionStateStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+  );
+  // First collapse everything
+  function collapseAll(node) {
+    if (node.children.length) node.collapsed = true;
+    node.children.forEach(collapseAll);
+  }
+  rootNode.children.forEach(collapseAll);
+  // Now walk rendered order, expanding as we go
+  let lineNum = 0;
+  function walk(node) {
+    lineNum++;
+    if (node.children.length) {
+      if (expandedSet.has(lineNum)) {
+        node.collapsed = false;
+        node.children.forEach(walk); // now they are rendered, continue counting
+      }
+      // if not in set, stays collapsed, children not counted
+    }
+  }
+  rootNode.children.forEach(walk);
+}
+
+// lastCursor: 1-based line number of the focused node in rendered order.
+// Uses same visible-node counting as expansionState.
+function calcLastCursor(rootNode, targetId) {
+  let lineNum = 0, found = 0;
+  function walk(node) {
+    lineNum++;
+    if (node.id === targetId) found = lineNum;
+    if (!node.collapsed) node.children.forEach(walk);
+  }
+  rootNode.children.forEach(walk);
+  return found || 1;
+}
+
+// Given a 1-based lastCursor line number, return the node id at that position.
+function nodeIdAtLine(rootNode, lineNum) {
+  let count = 0, foundId = null;
+  function walk(node) {
+    count++;
+    if (count === lineNum) { foundId = node.id; return; }
+    if (!node.collapsed) node.children.forEach(walk);
+  }
+  rootNode.children.forEach(walk);
+  return foundId;
+}
+
+// vertScrollState: 1-based line number of the node nearest the top of the viewport.
+function calcVertScrollState(rootNode) {
+  const container = document.getElementById('outline-container');
+  const containerTop = container.getBoundingClientRect().top;
+  let lineNum = 0, best = 1, bestDist = Infinity;
+  function walk(node) {
+    lineNum++;
+    const el = document.querySelector(`.node[data-id="${node.id}"] .node-row`);
+    if (el) {
+      const dist = Math.abs(el.getBoundingClientRect().top - containerTop);
+      if (dist < bestDist) { bestDist = dist; best = lineNum; }
+    }
+    if (!node.collapsed) node.children.forEach(walk);
+  }
+  rootNode.children.forEach(walk);
+  return best;
+}
+
+// Scroll the viewport so the given 1-based line number is near the top.
+function applyVertScrollState(rootNode, lineNum) {
+  if (!lineNum || lineNum <= 1) return;
+  const id = nodeIdAtLine(rootNode, lineNum);
+  if (!id) return;
+  const el = document.querySelector(`.node[data-id="${id}"]`);
+  if (el) el.scrollIntoView({ block: 'start', behavior: 'instant' });
+}
+
+let readOnly = false;
+
+function setReadOnly(url) {
+  readOnly = true;
+  document.body.classList.add('readonly');
+  const link = document.getElementById('url-source-link');
+  link.textContent = url;
+  link.href = url;
+}
+
+// ── Rules ──────────────────────────────────────────────
+// Rules control how each depth level is rendered on screen -- WYSIWYG.
+// Each rule: { fontSize, fontWeight, fontFamily, fontStyle, color, lineHeight, topMargin }
+// This matches the look of this.how pages.
+const RULES = [
+  // depth 0 -- top level, bold serif
+  { fontSize:'19px', fontWeight:'700', fontFamily:"'Lora',serif",    fontStyle:'normal', color:'var(--ink)',     lineHeight:'1.45', topMargin:'10px' },
+  // depth 1
+  { fontSize:'17px', fontWeight:'400', fontFamily:"'Lora',serif",    fontStyle:'normal', color:'var(--ink)',     lineHeight:'1.55', topMargin:'2px'  },
+  // depth 2
+  { fontSize:'16px', fontWeight:'400', fontFamily:"'Lora',serif",    fontStyle:'normal', color:'var(--ink-mid)', lineHeight:'1.55', topMargin:'1px'  },
+  // depth 3
+  { fontSize:'14px', fontWeight:'400', fontFamily:"'IBM Plex Mono',monospace", fontStyle:'normal', color:'var(--ink-mid)', lineHeight:'1.5', topMargin:'0' },
+  // depth 4+ (fallback)
+  { fontSize:'13px', fontWeight:'400', fontFamily:"'IBM Plex Mono',monospace", fontStyle:'normal', color:'var(--ink-light)', lineHeight:'1.5', topMargin:'0' },
+];
+
+function getRuleForDepth(depth) {
+  return RULES[Math.min(depth, RULES.length - 1)];
+}
+
+function applyRules() {
+  // Inject a <style> block with depth-based rules derived from RULES array.
+  let css = '';
+  RULES.forEach((r, d) => {
+    const sel = d < RULES.length - 1
+      ? `.node[data-depth="${d}"]>.node-row .node-text`
+      : `.node[data-depth]>.node-row .node-text`; // catch-all for deep nodes
+    css += `${sel}{font-size:${r.fontSize};font-weight:${r.fontWeight};font-family:${r.fontFamily};font-style:${r.fontStyle};color:${r.color};line-height:${r.lineHeight};}\n`;
+    if (r.topMargin && r.topMargin !== '0') {
+      css += `.node[data-depth="${d}"]>.node-row{margin-top:${r.topMargin};}\n`;
+    }
+  });
+  let styleEl = document.getElementById('rules-style');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'rules-style';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = css;
+}
+
+// ── Hit counter ─────────────────────────────────────────
+function readHttpFile(url, callback) {
+  fetch(url).then(r => r.text()).then(callback).catch(() => {});
+}
+function hitCounter(counterGroup, counterServer, thisPageUrl, referrer) {
+  var defaultCounterGroup = "scripting";
+  var defaultCounterServer = "//counters.scripting.com/hello";
+  if (counterGroup === undefined) counterGroup = defaultCounterGroup;
+  if (counterServer === undefined) counterServer = defaultCounterServer;
+  if (thisPageUrl === undefined) {
+    thisPageUrl = location.href;
+    if (thisPageUrl === undefined) thisPageUrl = "";
+  }
+  if (thisPageUrl.endsWith("#")) thisPageUrl = thisPageUrl.slice(0, -1);
+  if (referrer === undefined) referrer = document.referrer;
+  var url = counterServer + "?group=" + encodeURIComponent(counterGroup) + "&referer=" + encodeURIComponent(referrer) + "&url=" + encodeURIComponent(thisPageUrl);
+  readHttpFile(url, function(msg) { console.log("hitCounter: msgFromServer == " + msg); });
+}
+
+// ── localStorage persistence ──────────────────────────────
+const STORAGE_KEY = 'outliner_state';
+let saveTimer = null;
+
+function saveState() {
+  if (readOnly) return; // never overwrite saved state with a read-only URL view
+  try {
+    const state = {
+      title:          document.getElementById('doc-title').value,
+      meta:           { ...meta },
+      root:           serializeNode(root),
+      expansionState: calcExpansionState(root),
+      lastCursor:     focusedId ? calcLastCursor(root, focusedId) : 1,
+      vertScrollState: calcVertScrollState(root),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch(e) { console.log('saveState error:', e); }
+}
+
+function saveStateSoon() {
+  // Debounce -- save 1s after last change
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveState, 1000);
+}
+
+function serializeNode(node) {
+  return {
+    id:        node.id,
+    text:      node.text,
+    collapsed: node.collapsed,
+    children:  node.children.map(serializeNode),
+  };
+}
+
+function deserializeNode(obj) {
+  // Restore node, reusing saved ids so expansionState lines up
+  const node = { id: obj.id, text: obj.text || '', collapsed: obj.collapsed || false, children: [] };
+  if (obj.id >= idCounter) idCounter = obj.id + 1;
+  node.children = (obj.children || []).map(deserializeNode);
+  return node;
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const state = JSON.parse(raw);
+    document.getElementById('doc-title').value = state.title || 'Untitled';
+    if (state.meta) {
+      meta.dateCreated  = state.meta.dateCreated  || meta.dateCreated;
+      meta.dateModified = state.meta.dateModified || meta.dateModified;
+      meta.ownerName    = state.meta.ownerName    || '';
+      meta.ownerEmail   = state.meta.ownerEmail   || '';
+      refreshMetaUI();
+    }
+    idCounter = 0;
+    root = { id: 0, text: '__root__', children: (state.root.children || []).map(deserializeNode), collapsed: false };
+    applyExpansionState(root, state.expansionState || '');
+    // lastCursor and vertScrollState are applied after render() in init
+    return { lastCursor: state.lastCursor || 1, vertScrollState: state.vertScrollState || 1 };
+  } catch(e) {
+    console.log('loadState error:', e);
+    return false;
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+buildDocsPanel();
+refreshMetaUI();
+applyRules();
+hitCounter();
+
+const urlParam = new URLSearchParams(window.location.search).get('url');
+if (urlParam) {
+  setReadOnly(urlParam);
+  msg('Loading\u2026');
+  fetch(urlParam)
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(text => {
+      const xml = new DOMParser().parseFromString(text, 'text/xml');
+      const get = tag => { const el = xml.querySelector(`head > ${tag}`); return el ? el.textContent : ''; };
+      document.getElementById('doc-title').value = get('title') || urlParam.split('/').pop();
+      meta.dateCreated  = get('dateCreated')  || '';
+      meta.dateModified = get('dateModified') || '';
+      meta.ownerName    = get('ownerName')    || '';
+      meta.ownerEmail   = get('ownerEmail')   || '';
+      refreshMetaUI();
+      const body = xml.querySelector('body');
+      if (!body) throw new Error('No body element');
+      idCounter = 0;
+      root = { id:0, text:'__root__', children: Array.from(body.children).map(el => parseOPMLNode(el)), collapsed: false };
+      hoistStack = [];
+      applyExpansionState(root, get('expansionState'));
+      render();
+      setTimeout(() => {
+        const vs = parseInt(get('vertScrollState')) || 1;
+        const lc = parseInt(get('lastCursor')) || 1;
+        applyVertScrollState(root, vs);
+        const cursorId = nodeIdAtLine(root, lc);
+        if (cursorId) focusNode(cursorId);
+        else if (root.children.length) focusNode(root.children[0].id);
+      }, 50);
+      msg('Loaded: ' + urlParam.split('/').pop());
+    })
+    .catch(err => msg('Failed to load: ' + err.message));
+} else {
+  const restored = loadState();
+  if (!restored) {
+    root.children = [makeNode('')];
+    render();
+    setTimeout(() => { if (root.children.length) focusNode(root.children[0].id); }, 50);
+  } else {
+    render();
+    setTimeout(() => {
+      // Restore scroll position first, then cursor
+      applyVertScrollState(root, restored.vertScrollState);
+      const cursorId = nodeIdAtLine(root, restored.lastCursor);
+      if (cursorId) focusNode(cursorId);
+      else if (root.children.length) focusNode(root.children[0].id);
+    }, 50);
+  }
+}
+</script>
+</body>
+</html>

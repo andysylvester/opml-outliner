@@ -1,0 +1,12 @@
+{
+  "name": "opml-outliner",
+  "version": "0.5.0",
+  "private": true,
+  "description": "OPML outliner with subscription-list and inclusion support, plus a test suite.",
+  "scripts": {
+    "test": "node tests/run.js"
+  },
+  "devDependencies": {
+    "jsdom": "^22.1.0"
+  }
+}

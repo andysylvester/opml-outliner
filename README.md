@@ -48,4 +48,4 @@ npm test        # runs every tests/*.test.js and prints a summary
 
 Based on the outliner by **Dave Winer** (this.how / Drummer). Implements the [OPML 2.0 specification](https://opml.org/spec2.opml) — §Subscription lists and §Inclusion. The OPML specification is © UserLand Software / Scripting News; the reference spec files included here retain their original copyright.
 
-No license is specified for this repository yet — add one if you intend others to reuse the code.
+Licensed under the [MIT License](LICENSE) © 2026 Andy Sylvester.

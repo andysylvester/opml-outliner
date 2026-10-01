@@ -32,7 +32,7 @@ npm install     # first time only — installs jsdom (dev dependency)
 npm test        # runs every tests/*.test.js and prints a summary
 ```
 
-7 suites / 114 checks cover the lossless round-trip, Add feed, Add include, the inspector, type badges/validation, and in-place inclusion. See [`tests/README.md`](tests/README.md) for layout and notes on writing new tests.
+8 suites / 132 checks cover the lossless round-trip (including every `<head>` element), Add feed, Add include, the inspector, type badges/validation, and in-place inclusion. See [`tests/README.md`](tests/README.md) for layout and notes on writing new tests.
 
 ## Project structure
 

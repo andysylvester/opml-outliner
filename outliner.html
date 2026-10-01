@@ -137,7 +137,7 @@ body.readonly .insp-addbtn,body.readonly .insp-del{display:none}
 <header>
   <h1>Outliner</h1>
   <input id="doc-title" type="text" value="Untitled" placeholder="Document title" spellcheck="false">
-  <span id="version-badge">v0.6.0</span>
+  <span id="version-badge">v0.6.1</span>
 </header>
 
 <div id="doc-info">
@@ -242,6 +242,7 @@ const DOCS = [
     { text: "Head fields included: title, ownerName, ownerEmail, dateCreated, dateModified, expansionState" },
     { text: "expansionState records which nodes are expanded so the outline opens exactly as you left it" },
     { text: "Import OPML \u2014 loads an OPML file, restoring all head fields including expansionState" },
+    { text: "Every other head element (ownerId, docs, custom elements…) is kept as-is and written back on export" },
     { text: "All node attributes are preserved on import and export \u2014 nothing is dropped" },
     { text: "Compatible with files from Drummer and Frontier" },
   ]},
@@ -285,7 +286,22 @@ let meta = {
   dateModified: new Date().toUTCString(),
   ownerName: '',
   ownerEmail: '',
+  extraHead: [],   // serialized <head> children the app doesn't manage, kept verbatim
 };
+
+// Head elements the app reads and writes itself. Everything else in <head>
+// (ownerId, docs, windowTop, custom/namespaced elements, comments) is captured
+// as-is on import and written back unchanged on export.
+const MANAGED_HEAD = ['title','dateCreated','dateModified','ownerName','ownerEmail','expansionState','lastCursor','vertScrollState'];
+
+function readExtraHead(xml) {
+  const head = xml.querySelector('head');
+  if (!head) return [];
+  const ser = new XMLSerializer();
+  return Array.from(head.childNodes)
+    .filter(n => n.nodeType === 8 || (n.nodeType === 1 && !MANAGED_HEAD.includes(n.localName)))
+    .map(n => ser.serializeToString(n));
+}
 
 function refreshMetaUI() {
   document.getElementById('meta-owner-name').value  = meta.ownerName;
@@ -763,9 +779,7 @@ function collectIssues(node,issues){
   node.children.forEach(c=>collectIssues(c,issues));
   return issues;
 }
-function exportOPML(){
-  touchModified();
-  const title=document.getElementById('doc-title').value||'Untitled';
+function buildOPML(title){
   const expansionState = calcExpansionState(root);
   const lastCursorVal = focusedId ? calcLastCursor(root, focusedId) : 1;
   const vertScrollVal = calcVertScrollState(root);
@@ -778,9 +792,15 @@ function exportOPML(){
     expansionState    ? `    <expansionState>${esc(expansionState)}</expansionState>` : '',
     `    <lastCursor>${lastCursorVal}</lastCursor>`,
     `    <vertScrollState>${vertScrollVal}</vertScrollState>`,
+    ...(meta.extraHead||[]).map(s=>'    '+s),
   ].filter(Boolean).join('\n');
   const body=root.children.map(c=>nodeToOPML(c,4)).join('\n');
-  const opml=`<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n${headFields}\n  </head>\n  <body>\n${body}\n  </body>\n</opml>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n${headFields}\n  </head>\n  <body>\n${body}\n  </body>\n</opml>`;
+}
+function exportOPML(){
+  touchModified();
+  const title=document.getElementById('doc-title').value||'Untitled';
+  const opml=buildOPML(title);
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([opml],{type:'text/xml'}));
   a.download=(title.replace(/\s+/g,'_')||'outline')+'.opml';
@@ -802,6 +822,7 @@ function handleOPMLFile(e){
       meta.dateModified = get('dateModified') || new Date().toUTCString();
       meta.ownerName    = get('ownerName')    || '';
       meta.ownerEmail   = get('ownerEmail')   || '';
+      meta.extraHead    = readExtraHead(xml);
       refreshMetaUI();
       const body=xml.querySelector('body');
       if(!body)throw new Error('No body element');
@@ -1266,6 +1287,7 @@ function loadState() {
       meta.dateModified = state.meta.dateModified || meta.dateModified;
       meta.ownerName    = state.meta.ownerName    || '';
       meta.ownerEmail   = state.meta.ownerEmail   || '';
+      meta.extraHead    = Array.isArray(state.meta.extraHead) ? state.meta.extraHead : [];
       refreshMetaUI();
     }
     idCounter = 0;
@@ -1299,6 +1321,7 @@ if (urlParam) {
       meta.dateModified = get('dateModified') || '';
       meta.ownerName    = get('ownerName')    || '';
       meta.ownerEmail   = get('ownerEmail')   || '';
+      meta.extraHead    = readExtraHead(xml);
       refreshMetaUI();
       const body = xml.querySelector('body');
       if (!body) throw new Error('No body element');

@@ -1,6 +1,6 @@
 {
   "name": "opml-outliner",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "license": "MIT",
   "description": "OPML outliner with subscription-list and inclusion support, plus a test suite.",

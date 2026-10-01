@@ -29,6 +29,7 @@ node tests/roundtrip.test.js
 | `inspector.test.js` | Step 4: the attribute inspector — fields, type switching, add/rename/delete, read-only. |
 | `addfeed.test.js` | Step 5: the "Add feed" command — offline fallback, metadata fetch, node placement, cancel, export. |
 | `badge.test.js` | Step 6: type badges on rows + `collectIssues()` export validation. |
+| `head.test.js` | Every `<head>` element (incl. unmanaged ones like `ownerId`, `docs`, namespaced elements, comments) survives import → export and localStorage save → reload. |
 | `fixtures/subscriptionList.opml` | Real OPML 2.0 subscription-list example (opml.org). |
 
 ## Notes for writing new tests
